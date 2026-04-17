@@ -1,0 +1,16 @@
+{
+    "mappings": [
+        {
+            "trigger": "q",
+            "type": "simple",
+            "target": "1",
+            "mode": "tap"
+        },
+        {
+            "trigger": "mouse_right",
+            "type": "macro",
+            "script": "loop 0\ntap esc\nend"
+        }
+    ],
+    "hotkey": "f5"
+}

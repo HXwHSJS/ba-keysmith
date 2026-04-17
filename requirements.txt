@@ -1,0 +1,4 @@
+keyboard
+psutil
+pynput
+pyinstaller

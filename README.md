@@ -1,6 +1,6 @@
 # BA KeySmith
 
-**BA KeySmith（简称 BAKS）** 是由 **HXwHSJS** 开发的 Windows 桌面工具，用于蔚蓝档案（Blue Archive）PC 端的键位映射与自定义宏。
+**BA KeySmith（简称 BAKS）** 是由 **HXwHSJS/HX** 开发的 Windows 桌面工具，用于蔚蓝档案（Blue Archive）PC 端的键位映射与自定义宏。
 
 它可以把用户实际按下的键转换为游戏内按键输入，例如 `q -> 1`；也可以把键盘或鼠标按键绑定为宏触发键，执行连续点击、等待、循环、组合键、鼠标拖拽等操作。
 
@@ -188,7 +188,7 @@ dist/BAKeySmith.exe
 
 ## 免责声明
 
-BA KeySmith 是 HX 制作的非官方个人工具，与 Nexon、Yostar、蔚蓝档案开发或发行团队没有从属、授权、赞助或背书关系。
+BA KeySmith 是 HXwHSJS/HX 制作的非官方个人工具，与 Nexon、Yostar、蔚蓝档案开发或发行团队没有从属、授权、赞助或背书关系。
 
 请在遵守游戏条款、社区规则和当地法律法规的前提下使用本工具。使用本工具产生的后果由使用者自行承担。
 

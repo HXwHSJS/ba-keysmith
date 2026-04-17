@@ -10,9 +10,7 @@
 - 支持 `hold` 和 `tap` 两种简单映射模式。
 - 支持键盘与鼠标触发键，包括 `mouse_left`、`mouse_right`、`mouse_middle`、`mouse_x1`、`mouse_x2`。
 - 支持宏脚本指令：`press`、`release`、`tap`、`wait`、`loop`、`combo`、`drag`、`drag_rel`、`setpos`、`setpos_rel`。
-- 宏编辑器内置语法检查、行号、语法高亮和上下文补全。
-- 编辑宏时会自动暂停当前映射，避免在编辑窗口输入内容时误触发游戏输入。
-- 提供现代化 Tkinter 桌面界面。
+- 宏编辑器内置语法检查、行号、语法高亮和上下文补全，包括触发的键值。
 
 ## 下载使用
 
@@ -33,7 +31,8 @@ BAKeySmith.exe
 ```
 
 注意，BA KeySmith需要以管理员身份运行，否则输入可能无法送达游戏窗口。
-# KeyMapper 指令与语法参考手册（当前稳定版）
+
+# KeyMapper 指令与语法参考手册
 
 本文档列出了 KeyMapper 当前版本支持的所有宏脚本指令、简单映射模式及键名规范。
 
@@ -46,7 +45,7 @@ BAKeySmith.exe
 | 模式 | 说明 |
 | :--- | :--- |
 | **Hold（跟随）** | 按下触发键时按下目标键，松开触发键时松开目标键。 |
-| **Tap（单次点击）** | 无论触发键按多久，目标键只模拟一次按下并立即松开（约 50ms 延迟以保证识别）。 |
+| **Tap（单次点击）** | 无论触发键按多久，目标键只模拟一次按下并立即松开。 |
 
 ---
 
@@ -58,7 +57,7 @@ BAKeySmith.exe
 | :--- | :--- | :--- |
 | `press` | `press <键名>` | 按下并按住一个键（直到遇到对应的 `release`）。 |
 | `release` | `release <键名>` | 松开一个之前按住的键。 |
-| `tap` | `tap <键名>` | 点击一个键（按下后立即松开，约 1~2ms 极速执行）。 |
+| `tap` | `tap <键名>` | 点击一个键（按下后立即松开）。 |
 | `combo` | `combo <键1> <键2> ...` | 同时按下多个键，短暂保持后按相反顺序松开，用于模拟组合键（如 `combo ctrl c`）。 |
 
 ### 2. 流程控制指令
@@ -145,37 +144,6 @@ tap esc
 end
 ```
 
-常用指令示例：
-
-```text
-tap esc
-wait 100
-combo ctrl c
-drag_rel 120 0 left
-```
-
-## 常用键名
-
-```text
-esc
-tab
-enter
-space
-backspace
-shift
-ctrl
-alt
-up
-down
-left
-right
-mouse_left
-mouse_right
-mouse_middle
-mouse_x1
-mouse_x2
-```
-
 ## 从源码运行
 
 创建并激活虚拟环境，然后安装依赖：
@@ -209,7 +177,7 @@ dist/BAKeySmith.exe
 
 运行时配置保存在本地 `config.json` 中。该文件会记录你的键位映射、宏脚本和热键设置。
 
-`config.json` 已被 `.gitignore` 忽略，不会上传到仓库。仓库中提供了 `config.example.json` 作为参考模板。
+仓库中提供了 `config.example.json` 作为参考模板。
 
 ## 注意事项
 

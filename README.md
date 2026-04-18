@@ -1,7 +1,14 @@
-|  |  |
-| --- | --- |
-| <img src="./avatar.png" alt="BA KeySmith Avatar" width="140"> | <h1>BA KeySmith</h1><p><strong>BAKS</strong> 是用于 <strong>蔚蓝档案（Blue Archive）PC 端</strong> 的键位映射与自定义宏工具。</p><p>它可以把用户实际按下的键转换为游戏内按键输入，例如 `q -> 1`；也可以把键盘或鼠标按键绑定为宏触发键，执行连续点击、等待、循环、组合键、鼠标拖拽等操作。</p> |
+<p align="center">
+  <img src="./avatar.png" alt="BA KeySmith Avatar" width="140">
+</p>
 
+<h1 align="center">BA KeySmith</h1>
+
+<p align="center">
+  **BA KeySmith（简称 BAKS）** 是用于蔚蓝档案（Blue Archive）PC 端的键位映射与自定义宏的 Windows 工具。
+  <br>
+  它可以把用户实际按下的键转换为游戏内按键输入，例如 `q -> 1`；也可以把键盘或鼠标按键绑定为宏触发键，执行连续点击、等待、循环、组合键、鼠标拖拽等操作。
+</p>
 
 # BA KeySmith
 

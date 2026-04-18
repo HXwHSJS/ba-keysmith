@@ -11,8 +11,8 @@
 </p>
 
 ## 界面展示
-<img width="962" height="712" alt="image" src="https://github.com/user-attachments/assets/5c9d250b-3a80-4da0-b994-0bfb47f125f4" />
-
+<img width="962" height="712" alt="image" src="https://github.com/user-attachments/assets/13899d1e-65e1-4e4b-bff3-41eb9ad3ebac" />
+<img width="702" height="532" alt="image" src="https://github.com/user-attachments/assets/ee58341e-c33c-4d0a-a990-c763c17d1f1a" />
 
 ## 功能特性
 

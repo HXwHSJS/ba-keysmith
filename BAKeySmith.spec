@@ -5,11 +5,7 @@ a = Analysis(
     ['gui.py'],
     pathex=[],
     binaries=[],
-    datas=[
-        ('mapper.py', '.'),
-        ('utils.py', '.'),
-        ('script_compiler.py', '.'),
-    ],
+    datas=[],
     hiddenimports=['keyboard._winkeyboard', 'pynput.keyboard._win32', 'pynput.mouse._win32'],
     hookspath=[],
     hooksconfig={},

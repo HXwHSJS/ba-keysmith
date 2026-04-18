@@ -1,8 +1,54 @@
 # utils.py
 import ctypes
+import os
+import shutil
+import sys
 from ctypes import wintypes
+from pathlib import Path
 
 user32 = ctypes.windll.user32
+
+APP_NAME = "BAKeySmith"
+CONFIG_FILENAME = "config.json"
+
+def get_user_config_dir():
+    base_dir = os.environ.get('APPDATA')
+    if base_dir:
+        return Path(base_dir) / APP_NAME
+    return Path.home() / f".{APP_NAME.lower()}"
+
+def get_user_config_path(filename=CONFIG_FILENAME):
+    return get_user_config_dir() / filename
+
+def _legacy_config_candidates(filename=CONFIG_FILENAME):
+    candidates = [Path.cwd() / filename]
+    app_dir = Path(sys.executable).resolve().parent if getattr(sys, 'frozen', False) else Path(__file__).resolve().parent
+    candidates.append(app_dir / filename)
+
+    seen = set()
+    for candidate in candidates:
+        resolved = candidate.resolve()
+        if resolved in seen:
+            continue
+        seen.add(resolved)
+        yield candidate
+
+def ensure_user_config_path(filename=CONFIG_FILENAME):
+    target = get_user_config_path(filename)
+    target.parent.mkdir(parents=True, exist_ok=True)
+
+    if target.exists():
+        return target, None
+
+    for legacy_path in _legacy_config_candidates(filename):
+        try:
+            if legacy_path.exists() and legacy_path.is_file() and legacy_path.resolve() != target.resolve():
+                shutil.copy2(legacy_path, target)
+                return target, legacy_path
+        except OSError:
+            continue
+
+    return target, None
 
 # 键盘虚拟键码
 VK_CODES = {
@@ -21,7 +67,9 @@ VK_CODES = {
     'f9': 0x78, 'f10': 0x79, 'f11': 0x7A, 'f12': 0x7B,
     # 控制键
     'enter': 0x0D, 'space': 0x20, 'tab': 0x09, 'escape': 0x1B, 'esc': 0x1B,
-    'backspace': 0x08, 'shift': 0x10, 'ctrl': 0x11, 'alt': 0x12,
+    'backspace': 0x08, 'caps lock': 0x14, 'shift': 0x10, 'ctrl': 0x11, 'alt': 0x12,
+    'insert': 0x2D, 'delete': 0x2E, 'home': 0x24, 'end': 0x23,
+    'page up': 0x21, 'page down': 0x22, 'num lock': 0x90, 'scroll lock': 0x91,
     # 方向键
     'up': 0x26, 'down': 0x28, 'left': 0x25, 'right': 0x27,
 }
@@ -29,9 +77,41 @@ VK_CODES = {
 KEY_ALIASES = {
     'esc': 'escape',
     'return': 'enter',
+    'caps_lock': 'caps lock',
+    'capslock': 'caps lock',
+    'capital': 'caps lock',
+    'ins': 'insert',
+    'del': 'delete',
+    'pageup': 'page up',
+    'page_up': 'page up',
+    'pgup': 'page up',
+    'pagedown': 'page down',
+    'page_down': 'page down',
+    'pgdn': 'page down',
+    'num_lock': 'num lock',
+    'numlock': 'num lock',
+    'scroll_lock': 'scroll lock',
+    'scrolllock': 'scroll lock',
     'control': 'ctrl',
+    'ctl': 'ctrl',
+    'ctrl_l': 'ctrl',
+    'ctrl_r': 'ctrl',
     'control_l': 'ctrl',
     'control_r': 'ctrl',
+    'left ctrl': 'ctrl',
+    'right ctrl': 'ctrl',
+    'left control': 'ctrl',
+    'right control': 'ctrl',
+    'alt_l': 'alt',
+    'alt_r': 'alt',
+    'alt_gr': 'alt',
+    'left alt': 'alt',
+    'right alt': 'alt',
+    'option': 'alt',
+    'shift_l': 'shift',
+    'shift_r': 'shift',
+    'left shift': 'shift',
+    'right shift': 'shift',
 }
 
 # 鼠标事件标志
@@ -81,18 +161,33 @@ class INPUT(ctypes.Structure):
         ("union", INPUT_UNION),
     ]
 
-def get_vk(key_name):
+def normalize_key_name(key_name):
     if not isinstance(key_name, str):
-        return None
-    normalized = KEY_ALIASES.get(key_name.lower(), key_name.lower())
+        return key_name
+    normalized = key_name.strip().lower()
+    if normalized.startswith('key.'):
+        normalized = normalized[4:]
+    return KEY_ALIASES.get(normalized, normalized)
+
+def get_vk(key_name):
+    normalized = normalize_key_name(key_name)
     return VK_CODES.get(normalized)
 
 def is_mouse_key(key_name):
-    return key_name.startswith('mouse_')
+    return isinstance(key_name, str) and normalize_key_name(key_name).startswith('mouse_')
+
+def normalize_mouse_button(button):
+    button = normalize_key_name(button or 'left')
+    if button in MOUSE_EVENTS:
+        return button
+    if button in ('left', 'right', 'middle', 'x1', 'x2'):
+        return f'mouse_{button}'
+    return None
 
 def send_mouse_event(key_name, is_down):
+    key_name = normalize_key_name(key_name)
     if key_name not in MOUSE_EVENTS:
-        return
+        return False
     down_flag, up_flag = MOUSE_EVENTS[key_name]
     flag = down_flag if is_down else up_flag
     if key_name in ('mouse_x1', 'mouse_x2'):
@@ -100,6 +195,7 @@ def send_mouse_event(key_name, is_down):
         ctypes.windll.user32.mouse_event(flag, 0, 0, xbutton, 0)
     else:
         ctypes.windll.user32.mouse_event(flag, 0, 0, 0, 0)
+    return True
 
 def get_scan_code(vk):
     return ctypes.windll.user32.MapVirtualKeyW(vk, 0)
@@ -108,7 +204,7 @@ def send_key_input(key_name, is_down):
     """使用 SendInput 发送键盘事件（扫描码方式）"""
     vk = get_vk(key_name)
     if vk is None:
-        return
+        return False
 
     # 扩展键列表（方向键、功能键等）
     extended_keys = {
@@ -134,7 +230,7 @@ def send_key_input(key_name, is_down):
     inp.type = INPUT_KEYBOARD
     inp.union.ki = ki
 
-    ctypes.windll.user32.SendInput(1, ctypes.byref(inp), ctypes.sizeof(inp))
+    return ctypes.windll.user32.SendInput(1, ctypes.byref(inp), ctypes.sizeof(inp)) == 1
 
 # ---------- 鼠标移动函数 ----------
 MOUSEEVENTF_MOVE = 0x0001
@@ -149,20 +245,12 @@ def set_cursor_pos(x, y):
     user32.SetCursorPos(x, y)
 
 def send_mouse_down(button='left'):
-    if button == 'left':
-        ctypes.windll.user32.mouse_event(0x0002, 0, 0, 0, 0)
-    elif button == 'right':
-        ctypes.windll.user32.mouse_event(0x0008, 0, 0, 0, 0)
-    elif button == 'middle':
-        ctypes.windll.user32.mouse_event(0x0020, 0, 0, 0, 0)
+    key_name = normalize_mouse_button(button)
+    return send_mouse_event(key_name, True) if key_name else False
 
 def send_mouse_up(button='left'):
-    if button == 'left':
-        ctypes.windll.user32.mouse_event(0x0004, 0, 0, 0, 0)
-    elif button == 'right':
-        ctypes.windll.user32.mouse_event(0x0010, 0, 0, 0, 0)
-    elif button == 'middle':
-        ctypes.windll.user32.mouse_event(0x0040, 0, 0, 0, 0)
+    key_name = normalize_mouse_button(button)
+    return send_mouse_event(key_name, False) if key_name else False
 
 def get_cursor_pos():
     point = wintypes.POINT()

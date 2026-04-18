@@ -1,6 +1,8 @@
 # script_compiler.py
 from dataclasses import dataclass
-from typing import List, Union, Optional
+from typing import List, Union
+
+from utils import MOUSE_EVENTS, VK_CODES, normalize_key_name, normalize_mouse_button
 
 @dataclass
 class Instruction:
@@ -11,6 +13,20 @@ class Instruction:
 class ScriptCompiler:
     def __init__(self):
         self.errors: List[str] = []
+
+    @staticmethod
+    def _normalize_key_arg(key_name: str) -> str:
+        key_name = normalize_key_name(key_name)
+        if key_name in VK_CODES or key_name in MOUSE_EVENTS:
+            return key_name
+        raise ValueError(f"未知键名: {key_name}")
+
+    @staticmethod
+    def _normalize_drag_button(button: str) -> str | None:
+        key_name = normalize_mouse_button(button)
+        if not key_name:
+            return None
+        return key_name.replace('mouse_', '', 1)
 
     def compile(self, script_text: str) -> tuple[List[Instruction], List[str]]:
         """返回 (指令列表, 错误列表)"""
@@ -26,24 +42,24 @@ class ScriptCompiler:
 
             parts = line.split()
             cmd = parts[0].lower()
-            args = parts[1:]
+            args = [arg.lower() for arg in parts[1:]]
 
             try:
                 # ---------- 原有指令 ----------
                 if cmd == 'press':
                     if len(args) != 1:
                         raise ValueError(f"press 需要一个参数（键名）")
-                    instructions.append(Instruction('press', [args[0]], line_num))
+                    instructions.append(Instruction('press', [self._normalize_key_arg(args[0])], line_num))
 
                 elif cmd == 'release':
                     if len(args) != 1:
                         raise ValueError(f"release 需要一个参数（键名）")
-                    instructions.append(Instruction('release', [args[0]], line_num))
+                    instructions.append(Instruction('release', [self._normalize_key_arg(args[0])], line_num))
 
                 elif cmd == 'tap':
                     if len(args) != 1:
                         raise ValueError(f"tap 需要一个参数（键名）")
-                    instructions.append(Instruction('tap', [args[0]], line_num))
+                    instructions.append(Instruction('tap', [self._normalize_key_arg(args[0])], line_num))
 
                 elif cmd == 'wait':
                     if len(args) != 1:
@@ -80,8 +96,11 @@ class ScriptCompiler:
                     if 'mouse' in args:
                         use_mouse = True
                         args.remove('mouse')
-                    if args and args[-1] in ('left', 'right', 'middle'):
-                        button = args.pop()
+                    if len(args) >= 3:
+                        maybe_button = self._normalize_drag_button(args[-1])
+                        if maybe_button:
+                            button = maybe_button
+                            args.pop()
                     if len(args) == 2:
                         x, y = float(args[0]), float(args[1])
                         instructions.append(Instruction('drag', [x, y, use_mouse, button], line_num))
@@ -90,8 +109,11 @@ class ScriptCompiler:
 
                 elif cmd == 'drag_rel':
                     button = 'left'
-                    if args and args[-1] in ('left', 'right', 'middle'):
-                        button = args.pop()
+                    if len(args) >= 3:
+                        maybe_button = self._normalize_drag_button(args[-1])
+                        if maybe_button:
+                            button = maybe_button
+                            args.pop()
                     if len(args) == 2:
                         dx, dy = int(args[0]), int(args[1])
                         instructions.append(Instruction('drag_rel', [dx, dy, button], line_num))
@@ -120,7 +142,7 @@ class ScriptCompiler:
                 elif cmd == 'combo':
                     if len(args) < 1:
                         raise ValueError("combo 至少需要一个键名")
-                    instructions.append(Instruction('combo', args, line_num))
+                    instructions.append(Instruction('combo', [self._normalize_key_arg(arg) for arg in args], line_num))
 
                 else:
                     raise ValueError(f"未知指令: {cmd}")

@@ -2,13 +2,17 @@
 import tkinter as tk
 from tkinter import ttk, messagebox, scrolledtext
 import json
+import re
 import threading
 import keyboard
 import ctypes
 import time
 from pynput import mouse, keyboard as pynput_keyboard
 from mapper import KeyMapper
-from utils import KEY_ALIASES, MOUSE_EVENTS, VK_CODES
+from utils import (
+    KEY_ALIASES, MOUSE_EVENTS, VK_CODES,
+    ensure_user_config_path, normalize_key_name
+)
 
 # ---------- Windows API 用于输入法禁用 ----------
 user32 = ctypes.windll.user32
@@ -48,7 +52,7 @@ def normalize_captured_key(key):
     if key_name in special_chars:
         return special_chars[key_name]
     if isinstance(key_name, str):
-        return KEY_ALIASES.get(key_name.lower(), key_name.lower())
+        return normalize_key_name(key_name)
     return str(key_name).lower()
 
 class ToolTip:
@@ -156,11 +160,14 @@ class KeyCaptureDialog:
         if self._closed:
             return
         self._closed = True
+        self.stop_listeners()
         if self.captured_key:
             self.callback(self.captured_key)
-        self.top.grab_release()
+        try:
+            self.top.grab_release()
+        except:
+            pass
         self.top.destroy()
-        self.stop_listeners()
         enable_ime()
         self.parent.after(20, self.parent.focus_force)
         if self.on_close:
@@ -170,9 +177,12 @@ class KeyCaptureDialog:
         if self._closed:
             return
         self._closed = True
-        self.top.grab_release()
-        self.top.destroy()
         self.stop_listeners()
+        try:
+            self.top.grab_release()
+        except:
+            pass
+        self.top.destroy()
         enable_ime()
         self.parent.after(20, self.parent.focus_force)
         if self.on_close:
@@ -180,9 +190,19 @@ class KeyCaptureDialog:
 
     def stop_listeners(self):
         if self.listener_keyboard:
-            self.listener_keyboard.stop()
+            try:
+                self.listener_keyboard.stop()
+                self.listener_keyboard.join(0.2)
+            except:
+                pass
+            self.listener_keyboard = None
         if self.listener_mouse:
-            self.listener_mouse.stop()
+            try:
+                self.listener_mouse.stop()
+                self.listener_mouse.join(0.2)
+            except:
+                pass
+            self.listener_mouse = None
 
 
 class HotkeyCaptureDialog(KeyCaptureDialog):
@@ -221,30 +241,144 @@ class HotkeyCaptureDialog(KeyCaptureDialog):
 
 
 class EditMappingDialog:
-    def __init__(self, parent, current_mode, callback):
+    def __init__(self, parent, mapping, existing_triggers, callback, on_close=None):
         self.top = tk.Toplevel(parent)
-        self.top.title("修改模式")
-        self.top.geometry("250x140")
+        self.top.title("编辑映射")
+        self.top.geometry("520x280")
         self.top.resizable(False, False)
         self.top.transient(parent)
         self.top.grab_set()
+        self.mapping = dict(mapping)
+        self.existing_triggers = {normalize_key_name(trigger) for trigger in existing_triggers}
         self.callback = callback
+        self.on_close = on_close
+        self._closed = False
+        self._capture_active = False
+        self._capture_cooldown_until = 0
+        self.script = self.mapping.get('script', '')
 
-        ttk.Label(self.top, text="选择新模式:", font=("微软雅黑", 10)).pack(pady=10)
-        self.mode_var = tk.StringVar(value=current_mode)
-        combo = ttk.Combobox(self.top, textvariable=self.mode_var, values=['hold', 'tap'], state='readonly', width=10)
-        combo.pack(pady=5)
+        main = ttk.Frame(self.top, padding=16)
+        main.pack(fill='both', expand=True)
+        main.columnconfigure(1, weight=1)
+
+        ttk.Label(main, text="触发键").grid(row=0, column=0, sticky='e', padx=(0, 10), pady=8)
+        self.trigger_var = tk.StringVar(value=normalize_key_name(self.mapping.get('trigger', '')))
+        ttk.Entry(main, textvariable=self.trigger_var, state='readonly').grid(row=0, column=1, sticky='ew', pady=8)
+        ttk.Button(main, text="重新捕获", command=lambda: self._capture_to(self.trigger_var)).grid(
+            row=0, column=2, padx=(10, 0), pady=8)
+
+        self.mapping_type = self.mapping.get('type', 'simple')
+        if self.mapping_type == 'simple':
+            ttk.Label(main, text="目标键").grid(row=1, column=0, sticky='e', padx=(0, 10), pady=8)
+            self.target_var = tk.StringVar(value=normalize_key_name(self.mapping.get('target', '')))
+            ttk.Entry(main, textvariable=self.target_var, state='readonly').grid(row=1, column=1, sticky='ew', pady=8)
+            ttk.Button(main, text="重新捕获", command=lambda: self._capture_to(self.target_var)).grid(
+                row=1, column=2, padx=(10, 0), pady=8)
+
+            ttk.Label(main, text="模式").grid(row=2, column=0, sticky='e', padx=(0, 10), pady=8)
+            self.mode_var = tk.StringVar(value=self.mapping.get('mode', 'hold'))
+            ttk.Combobox(
+                main,
+                textvariable=self.mode_var,
+                values=['hold', 'tap'],
+                state='readonly',
+                width=12
+            ).grid(row=2, column=1, sticky='w', pady=8)
+        else:
+            ttk.Label(main, text="宏脚本").grid(row=1, column=0, sticky='e', padx=(0, 10), pady=8)
+            self.script_preview_var = tk.StringVar()
+            ttk.Entry(main, textvariable=self.script_preview_var, state='readonly').grid(row=1, column=1, sticky='ew', pady=8)
+            ttk.Button(main, text="编辑脚本", command=self._edit_script).grid(row=1, column=2, padx=(10, 0), pady=8)
+            self._refresh_script_preview()
 
         btn_frame = ttk.Frame(self.top)
-        btn_frame.pack(pady=15)
-        ttk.Button(btn_frame, text="确定", command=self._on_ok, width=8).pack(side='left', padx=5)
-        ttk.Button(btn_frame, text="取消", command=self.top.destroy, width=8).pack(side='left', padx=5)
+        btn_frame.pack(fill='x', padx=16, pady=(0, 16))
+        ttk.Button(btn_frame, text="保存", command=self._on_ok, width=10).pack(side='right', padx=(8, 0))
+        ttk.Button(btn_frame, text="取消", command=self._on_cancel, width=10).pack(side='right')
 
-        center_window(self.top)
+        self.top.protocol("WM_DELETE_WINDOW", self._on_cancel)
+        center_window(self.top, 520, 280)
+
+    def _capture_to(self, variable):
+        if self._capture_active or time.perf_counter() < self._capture_cooldown_until:
+            return
+        self._capture_active = True
+
+        def set_key(key_name):
+            variable.set(normalize_key_name(key_name))
+
+        def on_close():
+            self._capture_active = False
+            self._capture_cooldown_until = time.perf_counter() + 0.25
+            if self.top.winfo_exists():
+                self.top.grab_set()
+                self.top.focus_force()
+
+        KeyCaptureDialog(self.top, set_key, capture_mouse=True, on_close=on_close)
+
+    def _refresh_script_preview(self):
+        preview = self.script.strip().replace('\n', ' / ')
+        self.script_preview_var.set(preview[:56] + ('...' if len(preview) > 56 else ''))
+
+    def _edit_script(self):
+        def save_script(script):
+            self.script = script
+            self._refresh_script_preview()
+
+        try:
+            self.top.grab_release()
+        except:
+            pass
+
+        def restore_grab():
+            if self.top.winfo_exists():
+                self.top.grab_set()
+                self.top.focus_force()
+
+        MacroEditorDialog(self.top, self.script, save_script, on_close=restore_grab)
 
     def _on_ok(self):
-        self.callback(self.mode_var.get())
+        new_trigger = normalize_key_name(self.trigger_var.get())
+        if not new_trigger:
+            messagebox.showerror("错误", "请先设置触发键", parent=self.top)
+            return
+        if new_trigger in self.existing_triggers:
+            messagebox.showerror("错误", f"触发键 {new_trigger} 已存在映射", parent=self.top)
+            return
+
+        updated = dict(self.mapping)
+        updated['trigger'] = new_trigger
+
+        if self.mapping_type == 'simple':
+            target = normalize_key_name(self.target_var.get())
+            if not target:
+                messagebox.showerror("错误", "请先设置目标键", parent=self.top)
+                return
+            updated['target'] = target
+            updated['mode'] = self.mode_var.get()
+        else:
+            if not self.script.strip():
+                messagebox.showerror("错误", "宏脚本不能为空", parent=self.top)
+                return
+            updated['script'] = self.script
+
+        self.callback(updated)
+        self._close()
+
+    def _on_cancel(self):
+        self._close()
+
+    def _close(self):
+        if self._closed:
+            return
+        self._closed = True
+        try:
+            self.top.grab_release()
+        except:
+            pass
         self.top.destroy()
+        if self.on_close:
+            self.on_close()
 
 class LineNumberCanvas(tk.Canvas):
     """行号显示画布"""
@@ -521,7 +655,6 @@ class MacroEditorDialog:
             # 解析错误行号
             for err in errors:
                 # 错误格式: "第 X 行: ..."
-                import re
                 match = re.search(r'第 (\d+) 行', err)
                 if match:
                     line_num = int(match.group(1))
@@ -608,7 +741,10 @@ class MacroEditorDialog:
         if self._closed:
             return
         self._closed = True
-        self.autocomplete.withdraw()
+        try:
+            self.autocomplete.destroy()
+        except:
+            pass
         self.top.destroy()
         if self.on_close:
             self.on_close()
@@ -639,6 +775,12 @@ class MapperGUI:
         self.log_window = None
         self._capture_dialog_active = False
         self._capture_dialog_cooldown_until = 0
+        self._dialog_pause_depth = 0
+        self._dialog_pause_previous_enabled = None
+        self._config_load_error = None
+        self._config_migrated_from = None
+        self._game_status_after_id = None
+        self.config_path, self._config_migrated_from = ensure_user_config_path()
         self.load_config()
 
         self.root = tk.Tk()
@@ -652,6 +794,14 @@ class MapperGUI:
         self.refresh_table()
         center_window(self.root, 960, 680)
 
+        if self._config_load_error:
+            self.root.after(100, lambda: messagebox.showwarning("配置读取失败", self._config_load_error))
+        if self._config_migrated_from:
+            self.root.after(150, lambda: messagebox.showinfo(
+                "配置已迁移",
+                "已将旧配置迁移到用户数据目录。\n"
+                f"新位置：{self.config_path}"
+            ))
         self.update_game_status()
 
     def setup_styles(self):
@@ -711,40 +861,144 @@ class MapperGUI:
 
     def load_config(self):
         try:
-            with open('config.json', 'r', encoding='utf-8') as f:
+            with open(self.config_path, 'r', encoding='utf-8') as f:
                 config = json.load(f)
-            self.mappings = config.get('mappings', [])
+            self.mappings = [
+                self.normalize_mapping_entry(mapping)
+                for mapping in config.get('mappings', [])
+                if isinstance(mapping, dict) and mapping.get('trigger')
+            ]
             self.hotkey = config.get('hotkey', 'ctrl+shift+f12')
         except FileNotFoundError:
             self.mappings = []
             self.hotkey = 'ctrl+shift+f12'
+        except json.JSONDecodeError as e:
+            self.mappings = []
+            self.hotkey = 'ctrl+shift+f12'
+            self._config_load_error = (
+                f"{self.config_path} 格式有误，已临时使用空配置。\n"
+                f"错误位置：第 {e.lineno} 行，第 {e.colno} 列。"
+            )
+
+    @staticmethod
+    def normalize_mapping_entry(mapping):
+        normalized = dict(mapping)
+        if 'trigger' in normalized:
+            normalized['trigger'] = normalize_key_name(normalized['trigger'])
+        if normalized.get('type', 'simple') == 'simple' and 'target' in normalized:
+            normalized['target'] = normalize_key_name(normalized['target'])
+        return normalized
 
     def save_config(self):
+        self.mappings = [
+            self.normalize_mapping_entry(mapping)
+            for mapping in self.mappings
+        ]
         config = {
             'mappings': self.mappings,
             'hotkey': self.hotkey
         }
-        with open('config.json', 'w', encoding='utf-8') as f:
+        self.config_path.parent.mkdir(parents=True, exist_ok=True)
+        with open(self.config_path, 'w', encoding='utf-8') as f:
             json.dump(config, f, indent=4)
 
     def log(self, message):
+        if not hasattr(self, 'root') or threading.current_thread() is threading.main_thread():
+            self._append_log(message)
+            return
+        self.root.after(0, lambda: self._append_log(message))
+
+    def _append_log(self, message):
         if self.log_window and self.log_window.top.winfo_exists():
             self.log_window.log(message)
+
+    def _set_stopped_ui(self):
+        self.btn_start.config(state='normal')
+        self.btn_stop.config(state='disabled')
+        self.status_var.set("已停止")
+        self.status_label.configure(style='Idle.Status.TLabel')
+
+    def _ensure_mapper_monitor_thread(self):
+        if self.mapper.running and (not self.mapper_thread or not self.mapper_thread.is_alive()):
+            self.mapper_thread = threading.Thread(target=self._run_mapper, daemon=True)
+            self.mapper_thread.start()
+
+    def _reload_running_mapper(self, action):
+        if not self.mapper.running:
+            return True
+
+        try:
+            compiled_mappings, trigger_states = KeyMapper.compile_mapping_entries(self.mappings)
+        except ValueError as e:
+            messagebox.showerror(
+                "映射配置错误",
+                f"{action}已保存到列表，但运行中的映射未更新：\n{e}"
+            )
+            self.log(f"{action}热更新失败: {e}")
+            return False
+
+        was_enabled = self.mapper.enabled
+        old_mappings = dict(self.mapper.mappings)
+        old_trigger_states = {trigger: False for trigger in old_mappings}
+        old_monitor_thread = self.mapper_thread
+
+        try:
+            self.mapper.stop()
+            if old_monitor_thread and old_monitor_thread.is_alive():
+                old_monitor_thread.join(timeout=0.2)
+            self.mapper.replace_compiled_mappings(compiled_mappings, trigger_states)
+            self.mapper.start()
+            self.mapper.set_enabled(was_enabled)
+            self._ensure_mapper_monitor_thread()
+            self._update_status_after_toggle(was_enabled)
+            self.log(f"{action}，运行中映射已热更新")
+            return True
+        except Exception as e:
+            self.mapper.stop()
+            try:
+                self.mapper.replace_compiled_mappings(old_mappings, old_trigger_states)
+                self.mapper.start()
+                self.mapper.set_enabled(was_enabled)
+                self._ensure_mapper_monitor_thread()
+                self._update_status_after_toggle(was_enabled)
+                messagebox.showerror(
+                    "热更新失败",
+                    f"新的映射未能启用，已恢复旧的运行映射。\n错误信息：{e}"
+                )
+                self.log(f"{action}热更新失败，已恢复旧映射: {e}")
+            except Exception as restore_error:
+                self.mapper.stop()
+                self._set_stopped_ui()
+                messagebox.showerror(
+                    "热更新失败",
+                    "新的映射未能启用，旧映射也未能自动恢复，已停止映射。\n"
+                    f"新映射错误：{e}\n恢复错误：{restore_error}"
+                )
+                self.log(f"{action}热更新失败，映射已停止: {restore_error}")
+            return False
 
     def _pause_mapper_for_dialog(self):
         if not self.mapper.running:
             return None
-        previous_enabled = self.mapper.enabled
-        self.mapper.enabled = False
-        self.mapper._release_all()
+        if self._dialog_pause_depth == 0:
+            self._dialog_pause_previous_enabled = self.mapper.enabled
+            self.mapper.set_enabled(False)
         self.status_var.set("编辑中暂停")
         self.status_label.configure(style='Editing.Status.TLabel')
-        return previous_enabled
+        self._dialog_pause_depth += 1
+        return True
 
-    def _restore_mapper_after_dialog(self, previous_enabled):
-        if previous_enabled is None or not self.mapper.running:
+    def _restore_mapper_after_dialog(self, pause_token):
+        if pause_token is None:
             return
-        self.mapper.enabled = previous_enabled
+        self._dialog_pause_depth = max(0, self._dialog_pause_depth - 1)
+        if self._dialog_pause_depth > 0:
+            return
+        previous_enabled = self._dialog_pause_previous_enabled
+        self._dialog_pause_previous_enabled = None
+        if not self.mapper.running:
+            return
+        self.mapper.set_enabled(previous_enabled)
         self._update_status_after_toggle(previous_enabled)
 
     def _open_macro_editor(self, initial_script, save_callback):
@@ -761,14 +1015,14 @@ class MapperGUI:
         )
 
     def update_game_status(self):
-        running = KeyMapper.check_game_running()
+        running = KeyMapper.check_game_running(self.mapper.target_process)
         if running:
             self.game_status_var.set("游戏运行中")
             self.game_status_label.configure(style='Running.Status.TLabel')
         else:
             self.game_status_var.set("游戏未运行")
             self.game_status_label.configure(style='Idle.Status.TLabel')
-        self.root.after(2000, self.update_game_status)
+        self._game_status_after_id = self.root.after(2000, self.update_game_status)
 
     def create_widgets(self):
         self.root.grid_rowconfigure(0, weight=0)
@@ -966,29 +1220,33 @@ class MapperGUI:
         if self._capture_dialog_active or time.perf_counter() < self._capture_dialog_cooldown_until:
             return
         self._capture_dialog_active = True
+        pause_token = self._pause_mapper_for_dialog()
         self.root.focus_force()
 
         def on_close():
             self._capture_dialog_active = False
             self._capture_dialog_cooldown_until = time.perf_counter() + 0.25
+            self._restore_mapper_after_dialog(pause_token)
 
         def set_key(key_name):
             if target == 'trigger':
-                self.trigger_var.set(key_name)
+                self.trigger_var.set(normalize_key_name(key_name))
             else:
-                self.target_var.set(key_name)
-            self.log(f"捕获按键: {key_name}")
+                self.target_var.set(normalize_key_name(key_name))
+            self.log(f"捕获按键: {normalize_key_name(key_name)}")
         KeyCaptureDialog(self.root, set_key, capture_mouse=True, on_close=on_close)
 
     def capture_hotkey(self):
         if self._capture_dialog_active or time.perf_counter() < self._capture_dialog_cooldown_until:
             return
         self._capture_dialog_active = True
+        pause_token = self._pause_mapper_for_dialog()
         self.root.focus_force()
 
         def on_close():
             self._capture_dialog_active = False
             self._capture_dialog_cooldown_until = time.perf_counter() + 0.25
+            self._restore_mapper_after_dialog(pause_token)
 
         def set_hotkey(combo):
             self.hotkey = combo
@@ -1012,31 +1270,38 @@ class MapperGUI:
             return
         item = self.tree.item(selected[0])
         values = item['values']
-        trigger = values[0]
-        mtype = values[1]
+        trigger = normalize_key_name(values[0])
 
-        # 找到对应映射
-        for m in self.mappings:
-            if m['trigger'] == trigger:
-                if mtype == '简单' or m.get('type') == 'simple':
-                    # 编辑简单映射的模式
-                    current_mode = m.get('mode', 'hold')
-                    def update_mode(new_mode):
-                        m['mode'] = new_mode
-                        self.save_config()
-                        self.refresh_table()
-                        self.log(f"修改映射 {trigger} 模式为 {new_mode}")
-                    EditMappingDialog(self.root, current_mode, update_mode)
-                else:
-                    # 编辑宏脚本
-                    current_script = m.get('script', '')
-                    def update_script(new_script):
-                        m['script'] = new_script
-                        self.save_config()
-                        self.refresh_table()
-                        self.log(f"修改宏 {trigger} 脚本")
-                    self._open_macro_editor(current_script, update_script)
-                break
+        for index, mapping in enumerate(self.mappings):
+            if normalize_key_name(mapping.get('trigger', '')) != trigger:
+                continue
+
+            pause_token = self._pause_mapper_for_dialog()
+
+            def restore():
+                self._restore_mapper_after_dialog(pause_token)
+
+            def update_mapping(updated_mapping, mapping_index=index, old_trigger=trigger):
+                updated_mapping = self.normalize_mapping_entry(updated_mapping)
+                self.mappings[mapping_index] = updated_mapping
+                self.save_config()
+                self.refresh_table()
+                self.log(f"修改映射: {old_trigger} -> {updated_mapping['trigger']}")
+                self._reload_running_mapper("修改映射")
+
+            existing_triggers = [
+                item.get('trigger', '')
+                for item_index, item in enumerate(self.mappings)
+                if item_index != index
+            ]
+            EditMappingDialog(
+                self.root,
+                mapping,
+                existing_triggers,
+                update_mapping,
+                on_close=restore
+            )
+            break
 
     def refresh_table(self):
         for row in self.tree.get_children():
@@ -1059,20 +1324,20 @@ class MapperGUI:
             self.tree.insert('', 'end', values=(trigger, display_type, display_info, display_mode), tags=(tag,))
 
     def add_mapping(self):
-        trigger = self.trigger_var.get().strip().lower()
+        trigger = normalize_key_name(self.trigger_var.get())
         if not trigger:
             messagebox.showerror("错误", "请先捕获触发键")
             return
 
         # 检查重复
         for m in self.mappings:
-            if m['trigger'] == trigger:
+            if normalize_key_name(m['trigger']) == trigger:
                 messagebox.showerror("错误", f"触发键 {trigger} 已存在映射")
                 return
 
         mtype = self.type_var.get()
         if mtype == 'simple':
-            target = self.target_var.get().strip().lower()
+            target = normalize_key_name(self.target_var.get())
             mode = self.mode_var.get()
             if not target:
                 messagebox.showerror("错误", "请先捕获目标键")
@@ -1102,6 +1367,7 @@ class MapperGUI:
         self.target_var.set('')
         self.script_preview_var.set('')
         self.log(f"添加映射: {trigger} ({mtype})")
+        self._reload_running_mapper("添加映射")
 
     def delete_mapping(self):
         selected = self.tree.selection()
@@ -1109,33 +1375,37 @@ class MapperGUI:
             messagebox.showinfo("提示", "请先在表格中选中要删除的映射")
             return
         item = self.tree.item(selected[0])
-        trigger = item['values'][0]
-        self.mappings = [m for m in self.mappings if m['trigger'] != trigger]
+        trigger = normalize_key_name(item['values'][0])
+        self.mappings = [
+            m for m in self.mappings
+            if normalize_key_name(m.get('trigger', '')) != trigger
+        ]
         self.save_config()
         self.refresh_table()
         self.log(f"删除映射: {trigger}")
+        self._reload_running_mapper("删除映射")
 
     def start_mapper(self):
+        if self.mapper.running:
+            return
         if self.mapper_thread and self.mapper_thread.is_alive():
+            self.mapper_thread.join(timeout=0.2)
+        if self._capture_dialog_active:
+            return
+        settle_delay = self._capture_dialog_cooldown_until - time.perf_counter()
+        if settle_delay > 0:
+            self.root.after(int(settle_delay * 1000) + 80, self.start_mapper)
             return
 
-        if not KeyMapper.check_game_running():
+        if not KeyMapper.check_game_running(self.mapper.target_process):
             if not messagebox.askyesno("游戏未运行", "未检测到 BlueArchive.exe 进程，映射可能不会生效。\n是否继续启动？"):
                 return
 
-        self.mapper.clear_mappings()
-        for m in self.mappings:
-            try:
-                if m.get('type') == 'macro':
-                    self.mapper.add_macro(m['trigger'], m['script'])
-                else:
-                    self.mapper.add_simple_mapping(m['trigger'], m['target'], m.get('mode', 'hold'))
-            except ValueError as e:
-                messagebox.showerror("宏编译错误", f"触发键 {m['trigger']} 的宏脚本有误:\n{e}")
-                return
-
-        self.mapper_thread = threading.Thread(target=self._run_mapper, daemon=True)
-        self.mapper_thread.start()
+        try:
+            self.mapper.replace_mappings(self.mappings)
+        except ValueError as e:
+            messagebox.showerror("映射配置错误", str(e))
+            return
 
         try:
             keyboard.remove_hotkey(self.hotkey)
@@ -1145,6 +1415,20 @@ class MapperGUI:
             keyboard.add_hotkey(self.hotkey, self.toggle_from_hotkey)
         except Exception as e:
             messagebox.showerror("错误", f"注册热键失败: {e}")
+            return
+
+        try:
+            self.mapper.start()
+        except Exception as e:
+            self.mapper.stop()
+            try:
+                keyboard.remove_hotkey(self.hotkey)
+            except:
+                pass
+            messagebox.showerror("错误", f"启动映射失败: {e}")
+            return
+
+        self._ensure_mapper_monitor_thread()
 
         self.btn_start.config(state='disabled')
         self.btn_stop.config(state='normal')
@@ -1153,14 +1437,15 @@ class MapperGUI:
         self.log(f"映射已启动，开关热键: {self.hotkey}")
 
     def _run_mapper(self):
-        self.mapper.start()
         while self.mapper.running:
             time.sleep(0.5)
 
     def toggle_from_hotkey(self):
         state = self.mapper.toggle()
-        self.root.after(0, lambda: self._update_status_after_toggle(state))
-        self.log(f"热键切换: {'运行' if state else '暂停'}")
+        def update():
+            self._update_status_after_toggle(state)
+            self.log(f"热键切换: {'运行' if state else '暂停'}")
+        self.root.after(0, update)
 
     def _update_status_after_toggle(self, state):
         if state:
@@ -1172,14 +1457,13 @@ class MapperGUI:
 
     def stop_mapper(self):
         self.mapper.stop()
+        self._dialog_pause_depth = 0
+        self._dialog_pause_previous_enabled = None
         try:
             keyboard.remove_hotkey(self.hotkey)
         except:
             pass
-        self.btn_start.config(state='normal')
-        self.btn_stop.config(state='disabled')
-        self.status_var.set("已停止")
-        self.status_label.configure(style='Idle.Status.TLabel')
+        self._set_stopped_ui()
         self.log("映射已停止")
 
     def show_log_window(self):
@@ -1189,6 +1473,12 @@ class MapperGUI:
             self.log_window.top.lift()
 
     def on_close(self):
+        if self._game_status_after_id:
+            try:
+                self.root.after_cancel(self._game_status_after_id)
+            except:
+                pass
+            self._game_status_after_id = None
         self.stop_mapper()
         if self.log_window and self.log_window.top.winfo_exists():
             self.log_window.top.destroy()

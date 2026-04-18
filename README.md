@@ -1,6 +1,7 @@
 <p align="center">
   <img src="./avatar.jpg" alt="BA Keysmith Logo" width="160">
 </p>
+
 # BA KeySmith
 
 **BA KeySmith（简称 BAKS）** 是用于蔚蓝档案（Blue Archive）PC 端的键位映射与自定义宏的 Windows 工具。

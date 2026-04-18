@@ -20,7 +20,7 @@
 
 [BA KeySmith Releases](https://github.com/HXwHSJS/ba-keysmith/releases)
 
-推荐下载测试版压缩包：
+推荐下载测试版压缩包（或者exe程序）：
 
 ```text
 BAKeySmith-v0.2.0-beta.1-windows-x64.zip

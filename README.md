@@ -7,6 +7,8 @@
 **BA KeySmith（简称 BAKS）** 是用于蔚蓝档案（Blue Archive）PC 端的键位映射与自定义宏的 Windows 工具。
 
 它可以把用户实际按下的键转换为游戏内按键输入，例如 `q -> 1`；也可以把键盘或鼠标按键绑定为宏触发键，执行连续点击、等待、循环、组合键、鼠标拖拽等操作。
+
+## 界面展示
 <img width="962" height="712" alt="image" src="https://github.com/user-attachments/assets/5c9d250b-3a80-4da0-b994-0bfb47f125f4" />
 
 

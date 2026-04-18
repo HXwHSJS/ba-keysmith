@@ -18,7 +18,7 @@
 
 [BA KeySmith Releases](https://github.com/HXwHSJS/ba-keysmith/releases)
 
-推荐下载压缩包版本（或者直接下载exe程序），例如：
+推荐下载压缩包版本（或者直接下载exe程序，但要与后生成的配置文件位于同一目录），例如：
 
 ```text
 BAKeySmith-v0.1.0-windows-x64.zip

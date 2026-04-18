@@ -1,6 +1,3 @@
-<p align="center">
-  <img src="./avatar.jpg" alt="BA Keysmith Logo" width="160">
-</p>
 
 # BA KeySmith
 

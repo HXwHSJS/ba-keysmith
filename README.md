@@ -8,7 +8,7 @@
 
 - 支持键盘按键映射，例如 `q` 映射为 `1`。
 - 支持 `hold` 和 `tap` 两种简单映射模式。
-- 支持键盘与鼠标触发键，包括 `mouse_left`、`mouse_right`、`mouse_middle`、`mouse_x1`、`mouse_x2`。
+- 支持键盘与鼠标触发键，包括如 `shift`、`crtl`、`alt`、`mouse_left`、`mouse_right`、`mouse_middle`、`mouse_x1`、`mouse_x2`。
 - 支持宏脚本指令：`press`、`release`、`tap`、`wait`、`loop`、`combo`、`drag`、`drag_rel`、`setpos`、`setpos_rel`。
 - 宏编辑器内置语法检查、行号、语法高亮和上下文补全，包括触发的键值。
 - 支持运行中编辑映射后自动热更新，无需手动停止再启动。

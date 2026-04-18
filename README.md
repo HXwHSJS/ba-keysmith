@@ -162,20 +162,6 @@ python -m venv venv
 .\venv\Scripts\python gui.py
 ```
 
-## 打包构建
-
-使用 PyInstaller 打包单文件 exe：
-
-```powershell
-.\venv\Scripts\python -m PyInstaller BAKeySmith.spec --clean -y
-```
-
-生成文件位置：
-
-```text
-dist/BAKeySmith.exe
-```
-
 ## 配置说明
 
 运行时配置会自动保存到用户数据目录：

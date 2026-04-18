@@ -34,6 +34,12 @@ BAKeySmith.exe
 
 程序可作为单个 exe 独立使用，不需要把 `config.json` 放在 exe 同目录。
 
+`v0.1.0`升级至`v0.2.0`程序首次执行将自动转移同目录的配置文件至用户数据目录：
+
+```text
+%APPDATA%\BAKeySmith\config.json
+```
+
 注意，BA KeySmith 需要以管理员身份运行，否则输入可能无法送达游戏窗口。
 
 ## KeyMapper 指令与语法参考手册

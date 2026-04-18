@@ -50,7 +50,7 @@ BAKeySmith.exe
 
 程序可作为单个 exe 独立使用，不需要把 `config.json` 放在 exe 同目录。
 
-`v0.1.0`升级至`v0.2.0`程序首次执行将自动转移同目录的配置文件至用户数据目录：
+`v0.1.0`升级至`v0.2.0`的用户首次执行新版程序时程序将同目录的配置文件自动转移至用户数据目录：
 
 ```text
 %APPDATA%\BAKeySmith\config.json

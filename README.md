@@ -10,8 +10,14 @@
   将用户实际按下的键转换为游戏内按键输入，例如 <code>q -&gt; 1</code>；也可以把键盘或鼠标按键绑定为宏触发键，执行连点、等待、循环、组合键、鼠标拖拽等操作。
 </p>
 
-## 界面展示
+# 界面展示
+
+## 主界面
+
 <img width="962" height="712" alt="image" src="https://github.com/user-attachments/assets/13899d1e-65e1-4e4b-bff3-41eb9ad3ebac" />
+
+## 宏编辑界面
+
 <img width="702" height="532" alt="image" src="https://github.com/user-attachments/assets/ee58341e-c33c-4d0a-a990-c763c17d1f1a" />
 
 ## 功能特性

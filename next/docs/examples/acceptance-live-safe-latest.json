@@ -1,0 +1,46 @@
+{
+  "Tool": "BAKeySmith.Acceptance",
+  "Runtime": ".NET",
+  "GeneratedAtUtc": "2026-04-19T17:50:37.3489798+00:00",
+  "Scenario": "live-safe",
+  "BurstCount": 50,
+  "DrainTimeoutMs": 20000,
+  "SoakSeconds": 300,
+  "SoakRateHz": 20,
+  "Passed": true,
+  "DurationMs": 1183.5866,
+  "Scenarios": [
+    {
+      "Name": "live-safe",
+      "Passed": true,
+      "DurationMs": 1113.4875,
+      "Error": null,
+      "Metrics": {
+        "target_process": "powershell.exe",
+        "target_foreground_process": "powershell",
+        "blocked_foreground_process": "BAKeySmith.Acceptance",
+        "allowed_f14_events": 2,
+        "blocked_probe_output_delta": 0,
+        "reload_generation": 2,
+        "new_f16_events": 2,
+        "disabled_probe_output_delta": 0,
+        "long_macro_f18_down": 1,
+        "long_macro_f18_up": 1,
+        "stop_ms": 3.5621,
+        "post_stop_events": 0,
+        "diagnostic_events": 60,
+        "stopped_clean": true,
+        "working_set_start_mb": 22.32,
+        "working_set_end_mb": 35.297,
+        "working_set_delta_mb": 12.977,
+        "private_memory_start_mb": 8.16,
+        "private_memory_end_mb": 9.766,
+        "private_memory_delta_mb": 1.605,
+        "thread_count_start": 8,
+        "thread_count_end": 15,
+        "thread_count_delta": 7,
+        "cpu_percent_estimate": 0
+      }
+    }
+  ]
+}

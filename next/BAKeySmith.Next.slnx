@@ -1,0 +1,14 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/BAKeySmith.App/BAKeySmith.App.csproj" />
+    <Project Path="src/BAKeySmith.Core/BAKeySmith.Core.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/BAKeySmith.Core.SmokeTests/BAKeySmith.Core.SmokeTests.csproj" />
+  </Folder>
+  <Folder Name="/tools/">
+    <Project Path="tools/BAKeySmith.Acceptance/BAKeySmith.Acceptance.csproj" />
+    <Project Path="tools/BAKeySmith.Core.Benchmarks/BAKeySmith.Core.Benchmarks.csproj" />
+    <Project Path="tools/BAKeySmith.Headless/BAKeySmith.Headless.csproj" />
+  </Folder>
+</Solution>

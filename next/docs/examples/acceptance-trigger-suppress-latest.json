@@ -1,0 +1,96 @@
+{
+  "Tool": "BAKeySmith.Acceptance",
+  "Runtime": ".NET",
+  "GeneratedAtUtc": "2026-04-19T17:50:47.6247075+00:00",
+  "Scenario": "trigger-suppress",
+  "BurstCount": 50,
+  "DrainTimeoutMs": 20000,
+  "SoakSeconds": 300,
+  "SoakRateHz": 20,
+  "Passed": true,
+  "DurationMs": 1858.1367,
+  "Scenarios": [
+    {
+      "Name": "mouse-trigger-suppressed",
+      "Passed": true,
+      "DurationMs": 130.8008,
+      "Error": null,
+      "Metrics": {
+        "original_mouse_down_delta": 0,
+        "original_mouse_up_delta": 0,
+        "mapped_f14_events": 2,
+        "diagnostic_events": 20,
+        "stopped_clean": true
+      }
+    },
+    {
+      "Name": "mouse-trigger-foreground-blocked",
+      "Passed": true,
+      "DurationMs": 192.0359,
+      "Error": null,
+      "Metrics": {
+        "original_mouse_down_to_blocker": 1,
+        "original_mouse_up_to_blocker": 1,
+        "mapped_output_events": 0,
+        "diagnostic_events": 11,
+        "stopped_clean": true
+      }
+    },
+    {
+      "Name": "mouse-trigger-reload-disable-stop-clean",
+      "Passed": true,
+      "DurationMs": 387.2234,
+      "Error": null,
+      "Metrics": {
+        "old_trigger_pass_through_delta": 1,
+        "new_f16_events": 2,
+        "disabled_output_delta": 0,
+        "disabled_pass_through_delta": 1,
+        "diagnostic_events": 28,
+        "stopped_clean": true
+      }
+    },
+    {
+      "Name": "trigger-captured-then-foreground-changes-before-release",
+      "Passed": true,
+      "DurationMs": 507.838,
+      "Error": null,
+      "Metrics": {
+        "mapped_f14_down": 1,
+        "mapped_f14_up": 1,
+        "target_original_mouse_down": 0,
+        "target_original_mouse_up": 0,
+        "diagnostic_events": 17,
+        "stopped_clean": true
+      }
+    },
+    {
+      "Name": "self-injected-pass-through",
+      "Passed": true,
+      "DurationMs": 254.1251,
+      "Error": null,
+      "Metrics": {
+        "self_injected_pipeline_delta": 0,
+        "mapped_output_events": 0,
+        "diagnostic_events": 15,
+        "stopped_clean": true
+      }
+    },
+    {
+      "Name": "keyboard-trigger-gated-suppress",
+      "Passed": true,
+      "DurationMs": 250.8145,
+      "Error": null,
+      "Metrics": {
+        "allowed_original_key_down_delta": 0,
+        "allowed_original_key_up_delta": 0,
+        "allowed_mapped_f14_events": 2,
+        "blocked_original_key_down_delta": 1,
+        "blocked_original_key_up_delta": 1,
+        "blocked_mapped_output_events": 0,
+        "allowed_stopped_clean": true,
+        "blocked_stopped_clean": true
+      }
+    }
+  ]
+}

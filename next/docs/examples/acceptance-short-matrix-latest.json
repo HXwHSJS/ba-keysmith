@@ -1,0 +1,210 @@
+{
+  "Tool": "BAKeySmith.Acceptance",
+  "Runtime": ".NET",
+  "GeneratedAtUtc": "2026-04-19T17:50:01.6430525+00:00",
+  "Scenario": "all",
+  "BurstCount": 50,
+  "DrainTimeoutMs": 5000,
+  "SoakSeconds": 300,
+  "SoakRateHz": 20,
+  "Passed": true,
+  "DurationMs": 10311.5959,
+  "Scenarios": [
+    {
+      "Name": "burst-drain",
+      "Passed": true,
+      "DurationMs": 1618.6857,
+      "Error": null,
+      "Metrics": {
+        "burst_count": 50,
+        "input_events": 100,
+        "emit_ms": 0.7132,
+        "pipeline_queued": 50,
+        "pipeline_handled": 50
+      }
+    },
+    {
+      "Name": "reload-during-burst",
+      "Passed": true,
+      "DurationMs": 68.9535,
+      "Error": null,
+      "Metrics": {
+        "burst_count": 50,
+        "old_input_events_before_probe": 2,
+        "new_input_events": 2,
+        "generation": 2
+      }
+    },
+    {
+      "Name": "stop-during-long-macro",
+      "Passed": true,
+      "DurationMs": 122.232,
+      "Error": null,
+      "Metrics": {
+        "key_a_down": 1,
+        "key_a_up": 1,
+        "post_stop_events": 0
+      }
+    },
+    {
+      "Name": "reload-during-long-macro",
+      "Passed": true,
+      "DurationMs": 61.9559,
+      "Error": null,
+      "Metrics": {
+        "key_a_down": 1,
+        "key_a_up": 1,
+        "new_key_2_down": 1,
+        "new_key_2_up": 1
+      }
+    },
+    {
+      "Name": "foreground-gate-during-burst",
+      "Passed": true,
+      "DurationMs": 45.6679,
+      "Error": null,
+      "Metrics": {
+        "blocked_burst": 50,
+        "blocked_input_events": 0,
+        "allowed_key_1_down": 1,
+        "allowed_key_1_up": 1,
+        "blocked_pipeline_handled": 50
+      }
+    },
+    {
+      "Name": "lifecycle-start-stop-loop",
+      "Passed": true,
+      "DurationMs": 2011.7771,
+      "Error": null,
+      "Metrics": {
+        "loops": 50,
+        "input_events": 100,
+        "expected_input_events": 100,
+        "pipeline_queued": 50,
+        "pipeline_handled": 50,
+        "pipeline_pending_after_stop": 0,
+        "held_key_count_after_stop": 0,
+        "press_owner_count_after_stop": 0,
+        "stop_ms_total": 6.7727999999999975,
+        "stop_ms_avg": 0.13545599999999994,
+        "post_stop_events": 0,
+        "diagnostic_events": 850,
+        "stopped_clean": true,
+        "working_set_start_mb": 29.273,
+        "working_set_end_mb": 31.324,
+        "working_set_delta_mb": 2.051,
+        "private_memory_start_mb": 9.746,
+        "private_memory_end_mb": 10.77,
+        "private_memory_delta_mb": 1.023,
+        "thread_count_start": 14,
+        "thread_count_end": 15,
+        "thread_count_delta": 1,
+        "cpu_percent_estimate": 0.155
+      }
+    },
+    {
+      "Name": "lifecycle-reload-loop",
+      "Passed": true,
+      "DurationMs": 1971.5768,
+      "Error": null,
+      "Metrics": {
+        "loops": 50,
+        "input_events": 100,
+        "expected_input_events": 100,
+        "key_1_events": 50,
+        "key_2_events": 50,
+        "generation": 51,
+        "pipeline_queued": 100,
+        "pipeline_handled": 100,
+        "pipeline_pending_after_drain": 0,
+        "runtime_pending_actions_after_drain": 0,
+        "runtime_running_actions_after_drain": 0,
+        "held_key_count_after_drain": 0,
+        "press_owner_count_after_drain": 0,
+        "post_stop_events": 0,
+        "diagnostic_events": 761,
+        "stopped_clean": true,
+        "working_set_start_mb": 31.379,
+        "working_set_end_mb": 32.918,
+        "working_set_delta_mb": 1.539,
+        "private_memory_start_mb": 10.832,
+        "private_memory_end_mb": 12.398,
+        "private_memory_delta_mb": 1.566,
+        "thread_count_start": 15,
+        "thread_count_end": 15,
+        "thread_count_delta": 0,
+        "cpu_percent_estimate": 0
+      }
+    },
+    {
+      "Name": "lifecycle-enable-disable-loop",
+      "Passed": true,
+      "DurationMs": 2047.2491,
+      "Error": null,
+      "Metrics": {
+        "loops": 50,
+        "disabled_trigger_probes": 50,
+        "enabled_trigger_probes": 50,
+        "input_events": 100,
+        "expected_input_events": 100,
+        "pipeline_queued": 100,
+        "pipeline_handled": 100,
+        "pipeline_pending_after_drain": 0,
+        "runtime_pending_actions_after_drain": 0,
+        "runtime_running_actions_after_drain": 0,
+        "held_key_count_after_drain": 0,
+        "press_owner_count_after_drain": 0,
+        "post_stop_events": 0,
+        "diagnostic_events": 861,
+        "stopped_clean": true,
+        "working_set_start_mb": 32.941,
+        "working_set_end_mb": 33.84,
+        "working_set_delta_mb": 0.898,
+        "private_memory_start_mb": 12.398,
+        "private_memory_end_mb": 13.348,
+        "private_memory_delta_mb": 0.949,
+        "thread_count_start": 15,
+        "thread_count_end": 15,
+        "thread_count_delta": 0,
+        "cpu_percent_estimate": 0
+      }
+    },
+    {
+      "Name": "lifecycle-burst-reload-stop-interleave",
+      "Passed": true,
+      "DurationMs": 2345.4956,
+      "Error": null,
+      "Metrics": {
+        "loops": 50,
+        "burst_per_loop": 25,
+        "expected_key_2_events_max": 2500,
+        "key_a_down": 50,
+        "key_a_up": 50,
+        "key_2_events": 100,
+        "input_events": 200,
+        "stop_cleanup_events_allowed": 54,
+        "pipeline_queued": 1300,
+        "pipeline_handled": 776,
+        "pipeline_dropped": 524,
+        "pipeline_pending_after_stop": 0,
+        "runtime_pending_actions_after_stop": 0,
+        "runtime_running_actions_after_stop": 0,
+        "held_key_count_after_stop": 0,
+        "press_owner_count_after_stop": 0,
+        "post_stop_events": 0,
+        "diagnostic_events": 5129,
+        "stopped_clean": true,
+        "working_set_start_mb": 33.875,
+        "working_set_end_mb": 39.816,
+        "working_set_delta_mb": 5.941,
+        "private_memory_start_mb": 13.348,
+        "private_memory_end_mb": 18.703,
+        "private_memory_delta_mb": 5.355,
+        "thread_count_start": 15,
+        "thread_count_end": 15,
+        "thread_count_delta": 0,
+        "cpu_percent_estimate": 0.033
+      }
+    }
+  ]
+}

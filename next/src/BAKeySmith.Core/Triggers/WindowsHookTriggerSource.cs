@@ -1,11 +1,12 @@
 using System.Diagnostics;
 using System.Runtime.InteropServices;
 using BAKeySmith.Core.Contracts;
+using BAKeySmith.Core.Diagnostics;
 using BAKeySmith.Core.Input;
 
 namespace BAKeySmith.Core.Triggers;
 
-public sealed class WindowsHookTriggerSource : ITriggerSource
+public sealed class WindowsHookTriggerSource : ITriggerSource, ITriggerCapturePolicySink
 {
     private const int WhKeyboardLl = 13;
     private const int WhMouseLl = 14;
@@ -27,8 +28,9 @@ public sealed class WindowsHookTriggerSource : ITriggerSource
     private const int Xbutton2 = 0x0002;
 
     private readonly object _gate = new();
-    private readonly object _captureGate = new();
     private readonly HashSet<string> _capturedTriggers = new(StringComparer.OrdinalIgnoreCase);
+    private readonly IDiagnosticsSink _diagnostics;
+    private readonly IReadOnlySet<string> _blockedForegroundProcessNames;
     private readonly LowLevelProc _keyboardProc;
     private readonly LowLevelProc _mouseProc;
     private TriggerCapturePolicySnapshot _capturePolicy = TriggerCapturePolicySnapshot.Disabled;
@@ -38,8 +40,12 @@ public sealed class WindowsHookTriggerSource : ITriggerSource
     private uint _hookThreadId;
     private Exception? _startError;
 
-    public WindowsHookTriggerSource()
+    public WindowsHookTriggerSource(
+        IDiagnosticsSink? diagnostics = null,
+        IEnumerable<string>? blockedForegroundProcessNames = null)
     {
+        _diagnostics = diagnostics ?? NoOpDiagnosticsSink.Instance;
+        _blockedForegroundProcessNames = NormalizeProcessNames(blockedForegroundProcessNames);
         _keyboardProc = KeyboardHookCallback;
         _mouseProc = MouseHookCallback;
     }
@@ -165,6 +171,7 @@ public sealed class WindowsHookTriggerSource : ITriggerSource
                 if (triggerEvent is not null)
                 {
                     var decision = Decide(triggerEvent, createsCapturedSession: true);
+                    EmitTriggerReceived(triggerEvent, decision);
                     if (decision.Dispatch)
                     {
                         Triggered?.Invoke(this, triggerEvent);
@@ -249,6 +256,7 @@ public sealed class WindowsHookTriggerSource : ITriggerSource
                     ? TriggerEvent.Down(TriggerSpec.Mouse(mouseTrigger))
                     : TriggerEvent.Up(TriggerSpec.Mouse(mouseTrigger));
                 var decision = Decide(triggerEvent, createsCapturedSession);
+                EmitTriggerReceived(triggerEvent, decision);
                 if (decision.Dispatch)
                 {
                     Triggered?.Invoke(this, triggerEvent);
@@ -266,69 +274,159 @@ public sealed class WindowsHookTriggerSource : ITriggerSource
 
     private TriggerHookDecision Decide(TriggerEvent triggerEvent, bool createsCapturedSession)
     {
-        var key = triggerEvent.Trigger.Key;
-        if (triggerEvent.IsUp && TryReleaseCapturedTrigger(key))
-        {
-            return new TriggerHookDecision(Suppress: true, Dispatch: true);
-        }
-
-        if (triggerEvent.IsDown && IsCapturedTrigger(key))
-        {
-            return new TriggerHookDecision(Suppress: true, Dispatch: true);
-        }
-
         var policy = Volatile.Read(ref _capturePolicy);
+        var key = triggerEvent.Trigger.Key;
+        bool alreadyCaptured;
+        lock (_capturedTriggers)
+        {
+            alreadyCaptured = _capturedTriggers.Contains(key);
+        }
+
+        var requiresForegroundCheck =
+            triggerEvent.IsDown &&
+            !alreadyCaptured &&
+            policy.IsEnabled &&
+            policy.Hits(key);
+        var foregroundAllowed = requiresForegroundCheck && IsForegroundAllowed(policy.TargetProcess);
+        var policyHit = policy.IsEnabled && policy.Hits(key);
+        TriggerHookDecision decision;
+        lock (_capturedTriggers)
+        {
+            decision = EvaluateCaptureDecision(
+                triggerEvent,
+                policy,
+                createsCapturedSession,
+                foregroundAllowed,
+                _capturedTriggers);
+        }
+
+        EmitCaptureLifecycle(
+            triggerEvent,
+            decision,
+            policyHit,
+            alreadyCaptured,
+            foregroundAllowed,
+            createsCapturedSession);
+        return decision;
+    }
+
+    private void EmitTriggerReceived(TriggerEvent triggerEvent, TriggerHookDecision decision)
+    {
+        _diagnostics.Emit(DiagnosticEvent.Create(
+            "windows_hook",
+            "trigger_received",
+            fields: new Dictionary<string, string>
+            {
+                ["trigger"] = triggerEvent.Trigger.Key,
+                ["phase"] = triggerEvent.NormalizedPhase,
+                ["suppress"] = decision.Suppress.ToString(),
+                ["dispatch"] = decision.Dispatch.ToString()
+            }));
+    }
+
+    private void EmitCaptureLifecycle(
+        TriggerEvent triggerEvent,
+        TriggerHookDecision decision,
+        bool policyHit,
+        bool alreadyCaptured,
+        bool foregroundAllowed,
+        bool createsCapturedSession)
+    {
+        if (triggerEvent.IsDown &&
+            policyHit &&
+            !alreadyCaptured &&
+            foregroundAllowed &&
+            createsCapturedSession &&
+            decision == TriggerHookDecision.SuppressAndDispatch)
+        {
+            EmitCaptureEvent("captured_session_entered", triggerEvent);
+            return;
+        }
+
+        if (triggerEvent.IsUp &&
+            alreadyCaptured &&
+            decision == TriggerHookDecision.SuppressAndDispatch)
+        {
+            EmitCaptureEvent("release_matched_captured_session", triggerEvent);
+            return;
+        }
+
+        if (triggerEvent.IsDown &&
+            policyHit &&
+            !alreadyCaptured &&
+            !foregroundAllowed &&
+            decision == TriggerHookDecision.PassThrough)
+        {
+            EmitCaptureEvent("capture_blocked_by_foreground", triggerEvent);
+            return;
+        }
+
+        if (triggerEvent.IsUp &&
+            !alreadyCaptured &&
+            policyHit &&
+            decision == TriggerHookDecision.PassThrough)
+        {
+            EmitCaptureEvent("uncaptured_release_pass_through", triggerEvent);
+        }
+    }
+
+    private void EmitCaptureEvent(string name, TriggerEvent triggerEvent)
+    {
+        _diagnostics.Emit(DiagnosticEvent.Create(
+            "windows_hook",
+            name,
+            fields: new Dictionary<string, string>
+            {
+                ["trigger"] = triggerEvent.Trigger.Key,
+                ["phase"] = triggerEvent.NormalizedPhase
+            }));
+    }
+
+    internal static TriggerHookDecision EvaluateCaptureDecision(
+        TriggerEvent triggerEvent,
+        TriggerCapturePolicySnapshot policy,
+        bool createsCapturedSession,
+        bool foregroundAllowed,
+        ISet<string> capturedTriggers)
+    {
+        var key = triggerEvent.Trigger.Key;
+        if (triggerEvent.IsUp && capturedTriggers.Remove(key))
+        {
+            return TriggerHookDecision.SuppressAndDispatch;
+        }
+
+        if (triggerEvent.IsDown && capturedTriggers.Contains(key))
+        {
+            return TriggerHookDecision.SuppressOnly;
+        }
+
         if (!policy.IsEnabled || !policy.Hits(key) || !triggerEvent.IsDown)
         {
             return TriggerHookDecision.PassThrough;
         }
 
-        if (!IsForegroundAllowed(policy.TargetProcess))
+        if (!foregroundAllowed)
         {
             return TriggerHookDecision.PassThrough;
         }
 
         if (createsCapturedSession)
         {
-            CaptureTrigger(key);
+            capturedTriggers.Add(key);
         }
 
-        return new TriggerHookDecision(Suppress: true, Dispatch: true);
-    }
-
-    private void CaptureTrigger(string triggerKey)
-    {
-        lock (_captureGate)
-        {
-            _capturedTriggers.Add(triggerKey);
-        }
-    }
-
-    private bool IsCapturedTrigger(string triggerKey)
-    {
-        lock (_captureGate)
-        {
-            return _capturedTriggers.Contains(triggerKey);
-        }
-    }
-
-    private bool TryReleaseCapturedTrigger(string triggerKey)
-    {
-        lock (_captureGate)
-        {
-            return _capturedTriggers.Remove(triggerKey);
-        }
+        return TriggerHookDecision.SuppressAndDispatch;
     }
 
     private void ClearCapturedTriggers()
     {
-        lock (_captureGate)
+        lock (_capturedTriggers)
         {
             _capturedTriggers.Clear();
         }
     }
 
-    private static bool IsForegroundAllowed(string targetProcess)
+    private bool IsForegroundAllowed(string targetProcess)
     {
         if (string.IsNullOrWhiteSpace(targetProcess))
         {
@@ -345,15 +443,86 @@ public sealed class WindowsHookTriggerSource : ITriggerSource
         try
         {
             using var process = Process.GetProcessById((int)processId);
-            return string.Equals(
-                NormalizeProcessName(process.ProcessName),
-                NormalizeProcessName(targetProcess),
-                StringComparison.OrdinalIgnoreCase);
+            return IsForegroundAllowedForCapture(
+                targetProcess,
+                process.ProcessName,
+                _blockedForegroundProcessNames);
         }
         catch
         {
             return false;
         }
+    }
+
+    internal static bool IsForegroundAllowedForCapture(
+        string targetProcess,
+        string? foregroundProcess,
+        IEnumerable<string>? blockedForegroundProcessNames = null)
+    {
+        var normalizedTarget = NormalizeProcessName(targetProcess);
+        if (normalizedTarget.Length == 0)
+        {
+            return false;
+        }
+
+        var normalizedForeground = NormalizeProcessName(foregroundProcess);
+        if (normalizedForeground.Length == 0)
+        {
+            return false;
+        }
+
+        if (IsBlockedForegroundProcess(normalizedForeground, blockedForegroundProcessNames))
+        {
+            return false;
+        }
+
+        return string.Equals(
+            normalizedForeground,
+            normalizedTarget,
+            StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static bool IsBlockedForegroundProcess(
+        string normalizedForegroundProcess,
+        IEnumerable<string>? blockedForegroundProcessNames)
+    {
+        if (blockedForegroundProcessNames is null)
+        {
+            return false;
+        }
+
+        foreach (var blockedProcessName in blockedForegroundProcessNames)
+        {
+            if (string.Equals(
+                normalizedForegroundProcess,
+                NormalizeProcessName(blockedProcessName),
+                StringComparison.OrdinalIgnoreCase))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private static IReadOnlySet<string> NormalizeProcessNames(IEnumerable<string>? processNames)
+    {
+        var normalizedNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        if (processNames is null)
+        {
+            return normalizedNames;
+        }
+
+        foreach (var processName in processNames)
+        {
+            var normalized = NormalizeProcessName(processName);
+            if (normalized.Length > 0)
+            {
+                normalizedNames.Add(normalized);
+            }
+        }
+
+        return normalizedNames;
     }
 
     private static string NormalizeProcessName(string? processName)
@@ -463,8 +632,10 @@ public sealed class WindowsHookTriggerSource : ITriggerSource
         public int y;
     }
 
-    private readonly record struct TriggerHookDecision(bool Suppress, bool Dispatch)
+    internal readonly record struct TriggerHookDecision(bool Suppress, bool Dispatch)
     {
         public static TriggerHookDecision PassThrough { get; } = new(Suppress: false, Dispatch: false);
+        public static TriggerHookDecision SuppressOnly { get; } = new(Suppress: true, Dispatch: false);
+        public static TriggerHookDecision SuppressAndDispatch { get; } = new(Suppress: true, Dispatch: true);
     }
 }

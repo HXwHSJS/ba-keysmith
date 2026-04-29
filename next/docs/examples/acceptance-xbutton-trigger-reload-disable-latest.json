@@ -1,0 +1,46 @@
+{
+  "Tool": "BAKeySmith.Acceptance",
+  "Runtime": ".NET",
+  "GeneratedAtUtc": "2026-04-20T12:17:53.0836519+00:00",
+  "Scenario": "xbutton-trigger-reload-disable",
+  "BurstCount": 50,
+  "DrainTimeoutMs": 5000,
+  "SoakSeconds": 300,
+  "SoakRateHz": 20,
+  "Passed": true,
+  "DurationMs": 530.7321,
+  "Scenarios": [
+    {
+      "Name": "xbutton-trigger-reload-disable",
+      "Passed": true,
+      "DurationMs": 500.1606,
+      "Error": null,
+      "Metrics": {
+        "reload_semantics": "old_trigger_pass_through_new_trigger_allowed_disabled_pass_through",
+        "old_trigger_pass_through_down": 1,
+        "old_trigger_pass_through_up": 1,
+        "old_trigger_output_delta": 0,
+        "old_trigger_received_count": 1,
+        "old_trigger_pipeline_enqueued_count": 0,
+        "old_trigger_runtime_dispatched_count": 0,
+        "new_trigger_mapped_f18_events": 2,
+        "new_trigger_original_down_delta": 0,
+        "new_trigger_original_up_delta": 0,
+        "new_trigger_received_count": 1,
+        "new_trigger_pipeline_enqueued_count": 1,
+        "new_trigger_runtime_dispatched_count": 1,
+        "new_trigger_runtime_foreground_allowed_count": 0,
+        "disabled_output_delta": 0,
+        "disabled_pass_through_down": 1,
+        "disabled_pass_through_up": 1,
+        "disabled_trigger_received_count": 1,
+        "disabled_pipeline_enqueued_count": 0,
+        "disabled_runtime_dispatched_count": 0,
+        "disabled_runtime_ignored_count": 0,
+        "disabled_runtime_ignored_reasons": "",
+        "diagnostic_events": 5,
+        "stopped_clean": true
+      }
+    }
+  ]
+}

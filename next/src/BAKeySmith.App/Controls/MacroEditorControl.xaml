@@ -30,14 +30,13 @@
                 <ColumnDefinition Width="42" />
                 <ColumnDefinition Width="*" />
             </Grid.ColumnDefinitions>
-            <Border Background="#e2e8f0" BorderBrush="{StaticResource LineBrush}" BorderThickness="1,1,0,1">
-                <TextBlock x:Name="LineNumbersText"
-                           Text="1"
-                           Padding="8,10"
-                           Foreground="{StaticResource MutedBrush}"
-                           FontFamily="Cascadia Mono"
-                           FontSize="12"
-                           TextAlignment="Right" />
+            <Border x:Name="LineNumberViewport"
+                    VerticalAlignment="Top"
+                    Background="#e2e8f0"
+                    BorderBrush="{StaticResource LineBrush}"
+                    BorderThickness="1,1,0,1"
+                    ClipToBounds="True">
+                <Canvas x:Name="LineNumberCanvas" />
             </Border>
             <TextBox x:Name="ScriptBox"
                      Grid.Column="1"
@@ -47,10 +46,44 @@
                      VerticalScrollBarVisibility="Auto"
                      HorizontalScrollBarVisibility="Auto"
                      FontFamily="Cascadia Mono"
+                     FontSize="12"
+                     InputMethod.IsInputMethodEnabled="False"
+                     VerticalContentAlignment="Top"
                      Height="132"
                      SelectionChanged="ScriptBox_SelectionChanged"
                      PreviewKeyDown="ScriptBox_PreviewKeyDown"
                      TextChanged="ScriptBox_TextChanged" />
+            <Popup x:Name="CompletionPopup"
+                   Grid.Column="1"
+                   PlacementTarget="{Binding ElementName=ScriptBox}"
+                   Placement="Relative"
+                   AllowsTransparency="True"
+                   Focusable="False"
+                   StaysOpen="True"
+                   PopupAnimation="Fade">
+                <Border x:Name="CompletionPopupBorder"
+                        Background="White"
+                        BorderBrush="#94a3b8"
+                        BorderThickness="1"
+                        Padding="4"
+                        MaxHeight="172">
+                    <Border.Effect>
+                        <DropShadowEffect BlurRadius="12"
+                                          ShadowDepth="2"
+                                          Opacity="0.18" />
+                    </Border.Effect>
+                    <ListBox x:Name="CompletionList"
+                             MinWidth="220"
+                             MaxWidth="360"
+                             MaxHeight="160"
+                             DisplayMemberPath="Display"
+                             FontFamily="Cascadia Mono"
+                             FontSize="12"
+                             KeyboardNavigation.TabNavigation="Continue"
+                             PreviewKeyDown="CompletionList_PreviewKeyDown"
+                             MouseDoubleClick="CompletionList_MouseDoubleClick" />
+                </Border>
+            </Popup>
         </Grid>
 
         <Grid Margin="0,8,0,0">
@@ -79,30 +112,5 @@
                        TextWrapping="Wrap" />
         </Border>
 
-        <ListBox x:Name="DiagnosticList"
-                 Margin="0,8,0,0"
-                 Height="54"
-                 DisplayMemberPath="Display"
-                 FontFamily="Cascadia Mono"
-                 FontSize="12"
-                 Visibility="Collapsed"
-                 MouseDoubleClick="DiagnosticList_MouseDoubleClick" />
-
-        <Grid Margin="0,8,0,0">
-            <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="*" />
-                <ColumnDefinition Width="Auto" />
-            </Grid.ColumnDefinitions>
-            <ListBox x:Name="SuggestionList"
-                     Height="82"
-                     DisplayMemberPath="Display"
-                     FontFamily="Cascadia Mono"
-                     FontSize="12"
-                     MouseDoubleClick="SuggestionList_MouseDoubleClick" />
-            <Button Grid.Column="1"
-                    Content="插入补全"
-                    Click="InsertCompletion_Click"
-                    Margin="10,0,0,0" />
-        </Grid>
     </StackPanel>
 </UserControl>

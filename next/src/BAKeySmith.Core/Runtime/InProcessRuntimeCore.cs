@@ -330,6 +330,8 @@ public sealed class InProcessRuntimeCore : IRuntimeCore
                 var executor = new MacroExecutor(
                     _presses,
                     _inputBackend,
+                    _foregroundGate,
+                    config,
                     _diagnostics,
                     tapHold: config.TapHold);
                 return executor.ExecuteAsync(ownerId, macro, token);

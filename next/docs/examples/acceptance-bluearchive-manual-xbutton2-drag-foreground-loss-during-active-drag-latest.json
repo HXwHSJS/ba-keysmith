@@ -1,0 +1,498 @@
+{
+  "Tool": "BAKeySmith.Acceptance",
+  "Runtime": ".NET",
+  "GeneratedAtUtc": "2026-04-26T16:42:02.1112372+00:00",
+  "Scenario": "bluearchive-manual-xbutton2-drag-foreground-loss-during-active-drag",
+  "BurstCount": 50,
+  "DrainTimeoutMs": 5000,
+  "SoakSeconds": 300,
+  "SoakRateHz": 20,
+  "Passed": true,
+  "DurationMs": 3329.5273,
+  "Scenarios": [
+    {
+      "Name": "bluearchive-manual-xbutton2-drag-foreground-loss-during-active-drag",
+      "Passed": true,
+      "DurationMs": 3301.2505,
+      "Error": null,
+      "Metrics": {
+        "target_process": "BlueArchive.exe",
+        "target_process_id": 17312,
+        "target_window_title": "\u30D6\u30EB\u30FC\u30A2\u30FC\u30AB\u30A4\u30D6",
+        "validation_scope": "phase2d-d-bluearchive-xbutton2-drag-foreground-loss-during-active-drag",
+        "manual_xbutton_trigger": "mouse_x2",
+        "mapped_drag_button": "mouse_middle",
+        "foreground_loss_observed_layer": "macro_executor",
+        "foreground_loss_cancellation_layer": "macro_executor",
+        "foreground_cleanup_path": "macro_executor.finally.release_owner",
+        "foreground_cleanup_timing_model": "instruction_boundary",
+        "foreground_loss_detected_count": 1,
+        "foreground_loss_immediate_cleanup_proven": false,
+        "foreground_loss_cleanup_latency_measured": false,
+        "foreground_loss_to_cleanup_ms": null,
+        "cleanup_latency_bound_ms": null,
+        "foreground_loss_to_cleanup_within_expected_bound": null,
+        "foreground_loss_detected_during_wait": null,
+        "foreground_loss_cleanup_latency_note": "Current Phase 2D-D sample proves foreground-loss cancellation at macro instruction boundaries. If foreground loss occurs while a wait instruction is executing, detection and cleanup may be deferred until that wait returns; immediate cleanup latency is not measured in this sample.",
+        "runner_elevation_known": true,
+        "runner_elevated": true,
+        "runner_elevated_state": "elevated",
+        "target_elevation_known": true,
+        "target_elevated": true,
+        "target_elevated_state": "elevated",
+        "runner_target_same_elevation": true,
+        "real_target_observed_scope": "active_drag_before_foreground_loss,foreground_cleanup,physical_release_after_foreground_loss",
+        "real_target_pending_scope": "",
+        "real_target_failed_scope": "",
+        "manual_interrupt_confirmed": false,
+        "trigger_received_count": 2,
+        "trigger_down_received_count": 1,
+        "trigger_up_received_count": 1,
+        "pipeline_enqueued_count": 1,
+        "runtime_dispatched_count": 1,
+        "drag_started_count": 1,
+        "drag_button_down_count": 1,
+        "normal_drag_button_up_count": 0,
+        "drag_button_up_count": 1,
+        "move_event_before_foreground_loss_count": 1,
+        "foreground_lost_while_drag_active_count": 1,
+        "drag_completed_normally_count": 0,
+        "drag_button_up_from_foreground_cleanup_count": 1,
+        "move_event_after_foreground_loss_count": 0,
+        "unexpected_output_after_foreground_loss_count": 0,
+        "mapped_owner_cleanup_completed_count": 1,
+        "cleanup_completed_count": 1,
+        "held_owner_count_after_foreground_cleanup": 0,
+        "physical_capture_session_retained_after_foreground_loss": 1,
+        "captured_session_entered_count": 1,
+        "release_matched_captured_session_count": 1,
+        "blocked_pass_through_down_count": 0,
+        "blocked_pass_through_up_count": 0,
+        "unexpected_output_after_release_count": 0,
+        "foreground_returned_before_release_count": 0,
+        "retroactive_resume_after_foreground_return_count": 0,
+        "blocker_xbutton2_down_count": 0,
+        "blocker_xbutton2_up_count": 0,
+        "macro_started_count": 1,
+        "macro_finished_count": 1,
+        "cursor_start_x": 1918,
+        "cursor_start_y": 379,
+        "cursor_end_x": 366,
+        "cursor_end_y": 246,
+        "cursor_restored": true,
+        "move_total_dx": -1552,
+        "move_total_dy": -133,
+        "diagnostic_events": 23,
+        "stopped_clean": true,
+        "snapshot_active_drag": {
+          "IsStarted": true,
+          "IsPipelineRunning": true,
+          "Pipeline": {
+            "IsRunning": true,
+            "QueuedCount": 1,
+            "HandledCount": 1,
+            "DroppedCount": 0,
+            "PendingCount": 0
+          },
+          "RuntimeConfig": {
+            "TargetProcess": "BlueArchive.exe",
+            "TapHoldMilliseconds": 5,
+            "Mappings": [
+              {
+                "Id": "xbutton2-bluearchive-drag-foreground-loss-during-active-drag",
+                "Trigger": {
+                  "Device": "mouse",
+                  "Code": "mouse_x2",
+                  "NormalizedDevice": "mouse",
+                  "NormalizedCode": "mouse_x2",
+                  "Key": "mouse:mouse_x2"
+                },
+                "Action": {
+                  "Kind": "macro",
+                  "Key": null,
+                  "Macro": [
+                    {
+                      "Op": "press",
+                      "Args": [
+                        "mouse_middle"
+                      ],
+                      "Line": 1,
+                      "NormalizedOp": "press"
+                    },
+                    {
+                      "Op": "setpos_rel",
+                      "Args": [
+                        "18",
+                        "10"
+                      ],
+                      "Line": 2,
+                      "NormalizedOp": "setpos_rel"
+                    },
+                    {
+                      "Op": "wait",
+                      "Args": [
+                        "2000"
+                      ],
+                      "Line": 3,
+                      "NormalizedOp": "wait"
+                    },
+                    {
+                      "Op": "setpos_rel",
+                      "Args": [
+                        "12",
+                        "6"
+                      ],
+                      "Line": 4,
+                      "NormalizedOp": "setpos_rel"
+                    },
+                    {
+                      "Op": "wait",
+                      "Args": [
+                        "2000"
+                      ],
+                      "Line": 5,
+                      "NormalizedOp": "wait"
+                    },
+                    {
+                      "Op": "release",
+                      "Args": [
+                        "mouse_middle"
+                      ],
+                      "Line": 6,
+                      "NormalizedOp": "release"
+                    }
+                  ],
+                  "NormalizedKind": "macro"
+                },
+                "NormalizedId": "xbutton2-bluearchive-drag-foreground-loss-during-active-drag"
+              }
+            ],
+            "TapHold": "00:00:00.0050000"
+          },
+          "Runtime": {
+            "State": "Enabled",
+            "Generation": 1,
+            "MappingCount": 1,
+            "ActiveWorkerCount": 1,
+            "PendingActionCount": 0,
+            "RunningActionCount": 1,
+            "LastForegroundAllowed": true,
+            "Presses": {
+              "KeyOwners": {
+                "mouse_middle": [
+                  "xbutton2-bluearchive-drag-foreground-loss-during-active-drag:macro:1"
+                ]
+              },
+              "OwnerKeys": {
+                "xbutton2-bluearchive-drag-foreground-loss-during-active-drag:macro:1": [
+                  "mouse_middle"
+                ]
+              },
+              "IsEmpty": false
+            }
+          }
+        },
+        "snapshot_after_foreground_cleanup": {
+          "IsStarted": true,
+          "IsPipelineRunning": true,
+          "Pipeline": {
+            "IsRunning": true,
+            "QueuedCount": 2,
+            "HandledCount": 2,
+            "DroppedCount": 0,
+            "PendingCount": 0
+          },
+          "RuntimeConfig": {
+            "TargetProcess": "BlueArchive.exe",
+            "TapHoldMilliseconds": 5,
+            "Mappings": [
+              {
+                "Id": "xbutton2-bluearchive-drag-foreground-loss-during-active-drag",
+                "Trigger": {
+                  "Device": "mouse",
+                  "Code": "mouse_x2",
+                  "NormalizedDevice": "mouse",
+                  "NormalizedCode": "mouse_x2",
+                  "Key": "mouse:mouse_x2"
+                },
+                "Action": {
+                  "Kind": "macro",
+                  "Key": null,
+                  "Macro": [
+                    {
+                      "Op": "press",
+                      "Args": [
+                        "mouse_middle"
+                      ],
+                      "Line": 1,
+                      "NormalizedOp": "press"
+                    },
+                    {
+                      "Op": "setpos_rel",
+                      "Args": [
+                        "18",
+                        "10"
+                      ],
+                      "Line": 2,
+                      "NormalizedOp": "setpos_rel"
+                    },
+                    {
+                      "Op": "wait",
+                      "Args": [
+                        "2000"
+                      ],
+                      "Line": 3,
+                      "NormalizedOp": "wait"
+                    },
+                    {
+                      "Op": "setpos_rel",
+                      "Args": [
+                        "12",
+                        "6"
+                      ],
+                      "Line": 4,
+                      "NormalizedOp": "setpos_rel"
+                    },
+                    {
+                      "Op": "wait",
+                      "Args": [
+                        "2000"
+                      ],
+                      "Line": 5,
+                      "NormalizedOp": "wait"
+                    },
+                    {
+                      "Op": "release",
+                      "Args": [
+                        "mouse_middle"
+                      ],
+                      "Line": 6,
+                      "NormalizedOp": "release"
+                    }
+                  ],
+                  "NormalizedKind": "macro"
+                },
+                "NormalizedId": "xbutton2-bluearchive-drag-foreground-loss-during-active-drag"
+              }
+            ],
+            "TapHold": "00:00:00.0050000"
+          },
+          "Runtime": {
+            "State": "Enabled",
+            "Generation": 1,
+            "MappingCount": 1,
+            "ActiveWorkerCount": 1,
+            "PendingActionCount": 0,
+            "RunningActionCount": 0,
+            "LastForegroundAllowed": true,
+            "Presses": {
+              "KeyOwners": {},
+              "OwnerKeys": {},
+              "IsEmpty": true
+            }
+          }
+        },
+        "snapshot_running": {
+          "IsStarted": true,
+          "IsPipelineRunning": true,
+          "Pipeline": {
+            "IsRunning": true,
+            "QueuedCount": 2,
+            "HandledCount": 2,
+            "DroppedCount": 0,
+            "PendingCount": 0
+          },
+          "RuntimeConfig": {
+            "TargetProcess": "BlueArchive.exe",
+            "TapHoldMilliseconds": 5,
+            "Mappings": [
+              {
+                "Id": "xbutton2-bluearchive-drag-foreground-loss-during-active-drag",
+                "Trigger": {
+                  "Device": "mouse",
+                  "Code": "mouse_x2",
+                  "NormalizedDevice": "mouse",
+                  "NormalizedCode": "mouse_x2",
+                  "Key": "mouse:mouse_x2"
+                },
+                "Action": {
+                  "Kind": "macro",
+                  "Key": null,
+                  "Macro": [
+                    {
+                      "Op": "press",
+                      "Args": [
+                        "mouse_middle"
+                      ],
+                      "Line": 1,
+                      "NormalizedOp": "press"
+                    },
+                    {
+                      "Op": "setpos_rel",
+                      "Args": [
+                        "18",
+                        "10"
+                      ],
+                      "Line": 2,
+                      "NormalizedOp": "setpos_rel"
+                    },
+                    {
+                      "Op": "wait",
+                      "Args": [
+                        "2000"
+                      ],
+                      "Line": 3,
+                      "NormalizedOp": "wait"
+                    },
+                    {
+                      "Op": "setpos_rel",
+                      "Args": [
+                        "12",
+                        "6"
+                      ],
+                      "Line": 4,
+                      "NormalizedOp": "setpos_rel"
+                    },
+                    {
+                      "Op": "wait",
+                      "Args": [
+                        "2000"
+                      ],
+                      "Line": 5,
+                      "NormalizedOp": "wait"
+                    },
+                    {
+                      "Op": "release",
+                      "Args": [
+                        "mouse_middle"
+                      ],
+                      "Line": 6,
+                      "NormalizedOp": "release"
+                    }
+                  ],
+                  "NormalizedKind": "macro"
+                },
+                "NormalizedId": "xbutton2-bluearchive-drag-foreground-loss-during-active-drag"
+              }
+            ],
+            "TapHold": "00:00:00.0050000"
+          },
+          "Runtime": {
+            "State": "Enabled",
+            "Generation": 1,
+            "MappingCount": 1,
+            "ActiveWorkerCount": 1,
+            "PendingActionCount": 0,
+            "RunningActionCount": 0,
+            "LastForegroundAllowed": true,
+            "Presses": {
+              "KeyOwners": {},
+              "OwnerKeys": {},
+              "IsEmpty": true
+            }
+          }
+        },
+        "snapshot_stopped": {
+          "IsStarted": false,
+          "IsPipelineRunning": false,
+          "Pipeline": {
+            "IsRunning": false,
+            "QueuedCount": 2,
+            "HandledCount": 2,
+            "DroppedCount": 0,
+            "PendingCount": 0
+          },
+          "RuntimeConfig": {
+            "TargetProcess": "BlueArchive.exe",
+            "TapHoldMilliseconds": 5,
+            "Mappings": [
+              {
+                "Id": "xbutton2-bluearchive-drag-foreground-loss-during-active-drag",
+                "Trigger": {
+                  "Device": "mouse",
+                  "Code": "mouse_x2",
+                  "NormalizedDevice": "mouse",
+                  "NormalizedCode": "mouse_x2",
+                  "Key": "mouse:mouse_x2"
+                },
+                "Action": {
+                  "Kind": "macro",
+                  "Key": null,
+                  "Macro": [
+                    {
+                      "Op": "press",
+                      "Args": [
+                        "mouse_middle"
+                      ],
+                      "Line": 1,
+                      "NormalizedOp": "press"
+                    },
+                    {
+                      "Op": "setpos_rel",
+                      "Args": [
+                        "18",
+                        "10"
+                      ],
+                      "Line": 2,
+                      "NormalizedOp": "setpos_rel"
+                    },
+                    {
+                      "Op": "wait",
+                      "Args": [
+                        "2000"
+                      ],
+                      "Line": 3,
+                      "NormalizedOp": "wait"
+                    },
+                    {
+                      "Op": "setpos_rel",
+                      "Args": [
+                        "12",
+                        "6"
+                      ],
+                      "Line": 4,
+                      "NormalizedOp": "setpos_rel"
+                    },
+                    {
+                      "Op": "wait",
+                      "Args": [
+                        "2000"
+                      ],
+                      "Line": 5,
+                      "NormalizedOp": "wait"
+                    },
+                    {
+                      "Op": "release",
+                      "Args": [
+                        "mouse_middle"
+                      ],
+                      "Line": 6,
+                      "NormalizedOp": "release"
+                    }
+                  ],
+                  "NormalizedKind": "macro"
+                },
+                "NormalizedId": "xbutton2-bluearchive-drag-foreground-loss-during-active-drag"
+              }
+            ],
+            "TapHold": "00:00:00.0050000"
+          },
+          "Runtime": {
+            "State": "Stopped",
+            "Generation": 1,
+            "MappingCount": 1,
+            "ActiveWorkerCount": 0,
+            "PendingActionCount": 0,
+            "RunningActionCount": 0,
+            "LastForegroundAllowed": true,
+            "Presses": {
+              "KeyOwners": {},
+              "OwnerKeys": {},
+              "IsEmpty": true
+            }
+          }
+        }
+      }
+    }
+  ]
+}

@@ -94,6 +94,13 @@ internal sealed class CountingInputBackend : IInputBackend
             (isDown is null || e.IsDown == isDown));
     }
 
+    public void Reset()
+    {
+        while (_events.TryDequeue(out _))
+        {
+        }
+    }
+
     private static string NormalizeCode(InputCommand command)
     {
         return command.Kind.Trim().Equals("mouse", StringComparison.OrdinalIgnoreCase)

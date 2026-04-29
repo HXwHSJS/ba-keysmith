@@ -75,12 +75,39 @@ public sealed class RuntimeHost : IAsyncDisposable
             return;
         }
 
-        await Runtime.LoadAsync(RuntimeConfig, cancellationToken);
-        await Runtime.EnableAsync(cancellationToken);
-        ApplyTriggerCapturePolicy(isEnabled: true);
-        await Pipeline.StartAsync(cancellationToken);
-        _started = true;
-        _diagnostics.Emit(DiagnosticEvent.Create("host", "started"));
+        try
+        {
+            await Runtime.LoadAsync(RuntimeConfig, cancellationToken);
+            await Runtime.EnableAsync(cancellationToken);
+            ApplyTriggerCapturePolicy(isEnabled: true);
+            await Pipeline.StartAsync(cancellationToken);
+            _started = true;
+            _diagnostics.Emit(DiagnosticEvent.Create("host", "started"));
+        }
+        catch
+        {
+            ApplyTriggerCapturePolicy(isEnabled: false);
+            try
+            {
+                await Pipeline.StopAsync(CancellationToken.None);
+            }
+            catch
+            {
+                // Best-effort rollback: preserve the original start failure.
+            }
+
+            try
+            {
+                await Runtime.StopAsync(CancellationToken.None);
+            }
+            catch
+            {
+                // Best-effort rollback: preserve the original start failure.
+            }
+
+            _started = false;
+            throw;
+        }
     }
 
     public async ValueTask ReloadAsync(
@@ -146,7 +173,7 @@ public sealed class RuntimeHost : IAsyncDisposable
 
     private void ApplyTriggerCapturePolicy(bool isEnabled)
     {
-        if (_triggerSource is not WindowsHookTriggerSource windowsHook)
+        if (_triggerSource is not ITriggerCapturePolicySink capturePolicySink)
         {
             return;
         }
@@ -154,7 +181,7 @@ public sealed class RuntimeHost : IAsyncDisposable
         var triggerKeys = isEnabled
             ? RuntimeConfig.Mappings.Select(mapping => mapping.Trigger.Key)
             : Enumerable.Empty<string>();
-        windowsHook.UpdateCapturePolicy(TriggerCapturePolicySnapshot.FromRuntimeConfig(
+        capturePolicySink.UpdateCapturePolicy(TriggerCapturePolicySnapshot.FromRuntimeConfig(
             RuntimeConfig.TargetProcess,
             triggerKeys,
             isEnabled));

@@ -4,13 +4,20 @@ BA KeySmith Next treats the runtime as a replaceable engine behind a stable cont
 
 The current implementation is `InProcessRuntimeCore` in C#. A future Rust core must implement equivalent behavior and pass the same tests and benchmarks before it can replace the C# runtime.
 
-## Phase 1 Focus
+## Phase 1 Focus / Core RC0 Checkpoint
 
 先证明 C# baseline 在真实 Windows live/runtime 条件下足够硬，再决定是否值得让 Rust core 接管。
 
-This phase freezes new GUI and macro-editor experience expansion unless it directly improves live/runtime observability. The active priority is live validation, soak testing, and Acceptance JSON contract hardening.
+Phase 1 has exited and the later scoped Phase 2 runtime hardening work through Phase 2E first batch is accepted at its documented boundaries. The current `next/` C# runtime baseline can be treated as a Core RC0 candidate, but not as a release-ready RC.
 
-See [phase-1-live-runtime-plan.md](phase-1-live-runtime-plan.md) and [acceptance-schema.md](acceptance-schema.md).
+GUI shell planning / productization prep has completed under the GUI entry contract. `BAKeySmith.App` has entered first-stage implementation, passed GUI RC0 gate dry run, and can be treated as a GUI RC0 candidate. This does not make the GUI release-ready and does not reopen runtime behavior.
+
+See [project-state.md](project-state.md), [gui-entry-contract.md](gui-entry-contract.md), [packaging-contract.md](packaging-contract.md), [key-name-contract.md](key-name-contract.md), [macro-language-contract.md](macro-language-contract.md), [professional-keymapper-contract.md](professional-keymapper-contract.md), [phase-1-live-runtime-plan.md](phase-1-live-runtime-plan.md), and [acceptance-schema.md](acceptance-schema.md).
+
+V2 planning is separate from the current runtime contract. Runtime v2 design is
+documented in [runtime-v2-design-notes.md](runtime-v2-design-notes.md) and
+[architecture-v2-direction.md](architecture-v2-direction.md). It does not change
+the current Core RC0 candidate.
 
 ## Boundary
 
@@ -58,6 +65,16 @@ An original physical input event is suppressed only when all conditions are true
 - the foreground gate currently allows the target process/window.
 
 If foreground is blocked, stopped, disabled, or the event does not hit a trigger, the original input must pass through to the current foreground application and no mapping/macro output may be emitted.
+
+`BAKeySmith.App` adds an App-supplied self-foreground hook guard for live mode.
+The Core hook source supports an optional blocked foreground process-name list,
+but the default list is empty so Headless / Acceptance / harness targets can
+still use the current process as a target when needed. The WPF App live wiring
+passes BA KeySmith self process names explicitly. With that App wiring, a new
+uncaptured trigger hit while BA KeySmith itself is foreground must pass through
+at the hook layer: no original-input suppress, no trigger dispatch, and no new
+captured session. This does not change the existing captured-session release
+rule below.
 
 Keyboard and mouse triggers use the same default rule. If an explicit pass-through mode is added later, it must be an opt-in config field, never the default.
 
@@ -120,6 +137,13 @@ Current DSL v1 compiler accepts:
 - `setpos`
 - `setpos_rel`
 
+Professional key naming and DSL quality review are tracked outside this runtime contract:
+
+- [key-name-contract.md](key-name-contract.md) documents canonical names, aliases, modifier-only trigger compatibility, side-specific modifier future targets, and wheel trigger-only boundaries.
+- [macro-language-contract.md](macro-language-contract.md) documents command semantics, tap duration wording, loop / combo / drag quality notes, and DSL v1.1 / v2 future candidates.
+
+Foreground-aware wait hardening covers explicit active pointer scripts and built-in drag helpers in separate, narrow contracts. When a macro has a mouse button held through the ownership tracker and enters `wait`, `MacroExecutor` periodically checks the foreground gate and can interrupt that wait for cleanup before the full wait duration elapses. Keyboard-only waits retain normal wait semantics. Built-in `drag` / `drag_rel` helpers also enter an active pointer helper sequence after the mapped drag button is down; foreground loss during helper pointer delay or after helper move before release stops later non-cleanup output and releases the helper drag owner. Phase 2E first-batch dry harness scenarios prove only normal completion for `mouse_x2`-triggered explicit `mouse_middle` complete drag / multisegment drag scripts composed from `press`, `setpos_rel`, short `wait`, and `release`: down/up once, expected/actual move deltas matching, no post-completion output, no held-owner residue, and clean stop. This does not prove real-target complete drag SLOs, complete-drag stop / disable / reload / foreground-loss product scenarios, `mouse_left/right` physical triggers, pre-helper-down foreground drift, real-target latency SLOs, or interruption of a single in-flight `MoveMouseToAsync` call.
+
 ## Rust Decision Gate
 
 Rust is not selected by taste. It becomes eligible only if a Rust core:
@@ -131,6 +155,24 @@ Rust is not selected by taste. It becomes eligible only if a Rust core:
 - does not weaken single-app packaging or GUI maintainability.
 
 If Rust only adds FFI and packaging complexity without measured runtime benefit, the C# runtime remains the mainline.
+
+## Runtime V2 Direction
+
+Runtime v2 should execute `MappingActivationSession`, not a simple script:
+
+- trigger down creates a session;
+- `on_down` runs once;
+- `while_held` runs while trigger is held;
+- trigger up stops `while_held` and runs `on_up`;
+- runtime stop / reload / foreground lost / emergency stop runs cleanup only;
+- ownership ledger tracks BAKS-held keys, mouse buttons, and future coordinate
+  contact;
+- `while_held interval 0ms` is allowed but must be cancellable,
+  emergency-stop capable, and diagnostics-visible;
+- default same-mapping reentry policy should be `ignore_when_running`;
+- foreground lost defaults to cancel + cleanup, not pause/resume.
+
+This is not implemented in the current runtime.
 
 ## Config V1
 
@@ -145,6 +187,43 @@ Top-level fields:
 - `mappings`: user mappings.
 
 Legacy Python beta configs without `version`, `target_process`, or `tap_hold_ms` are accepted with defaults.
+
+### AppConfigV1 Freeze For GUI V1
+
+GUI v1 may edit only the current AppConfigV1 fields:
+
+- `target_process`
+- `hotkey`
+- `tap_hold_ms`
+- `mappings`
+- mapping `id`
+- mapping `trigger`
+- mapping `type`
+- mapping `target`
+- mapping `mode`
+- mapping `script`
+
+GUI must preserve extension data / unknown fields, must not introduce AppConfigV2, and must save through the existing `AppConfigSerializer` path. If the GUI needs schema changes, that is a separate config-contract change and must not be hidden inside GUI implementation.
+
+## Macro DSL V1 Freeze
+
+GUI macro editor v1 is a text editor over the existing `MacroScriptCompiler`.
+
+The frozen DSL v1 command set is:
+
+- `press`
+- `release`
+- `tap`
+- `wait`
+- `loop`
+- `end`
+- `combo`
+- `setpos`
+- `setpos_rel`
+- `drag`
+- `drag_rel`
+
+GUI v1 must use existing compiler validation / diagnostics, must not add DSL instructions, must not change DSL semantics, and must not treat GUI validation as runtime behavior change.
 
 ## Host Composition
 
@@ -167,6 +246,9 @@ dotnet run --project .\tools\BAKeySmith.Acceptance\BAKeySmith.Acceptance.csproj 
 dotnet run --project .\tools\BAKeySmith.Acceptance\BAKeySmith.Acceptance.csproj -- --scenario all --burst 50 --drain-timeout 5 --output acceptance-report.json
 dotnet run --project .\tools\BAKeySmith.Acceptance\BAKeySmith.Acceptance.csproj -- --scenario dry-run-soak --soak-seconds 300 --soak-rate 20 --drain-timeout 10 --output acceptance-dry-run-soak.json
 ```
+
+The output names in these commands are generated local report files, not
+archived stable samples. Archived samples live under `docs/examples/`.
 
 It writes a stable JSON report containing scenario name, pass/fail state, duration, error message, and scenario metrics. Human-readable progress is written separately.
 
@@ -210,7 +292,9 @@ dotnet run --project .\tools\BAKeySmith.Headless\BAKeySmith.Headless.csproj -- -
 - `reload-during-long-macro`: reloads while a macro owner is holding a key, verifies the owner is released, old trigger is inactive, new trigger works, and stop is clean.
 - `foreground-gate-during-burst`: blocks a trigger burst through the foreground gate, verifies no input is emitted, then allows foreground and verifies the trigger works.
 
-Live mode exists, but should only be used deliberately because it installs global hooks and uses `SendInput`:
+Live mode exists, but should only be used deliberately because it installs global hooks and uses `SendInput`.
+
+For Blue Archive live mode, BAKeySmith must run as administrator because Blue Archive is currently an administrator target and Python beta has the same requirement. Dry-run and config editing may run without administrator privileges. GUI elevation status display and non-elevated live-start guard are implemented in the App layer and must be verified for release-ready sign-off.
 
 ```powershell
 dotnet run --project .\tools\BAKeySmith.Headless\BAKeySmith.Headless.csproj -- --config ..\config.example.json --live --duration 10
@@ -220,9 +304,17 @@ dotnet run --project .\tools\BAKeySmith.Headless\BAKeySmith.Headless.csproj -- -
 
 The WPF app is intentionally a thin shell over `RuntimeHost`.
 
-Current GUI and macro-editor experience work is frozen for Phase 1 unless it directly improves live/runtime observability.
+Current GUI entry decision:
 
-Current GUI scope:
+- GUI shell planning / productization prep has completed.
+- `BAKeySmith.App` is a GUI RC0 candidate.
+- GUI RC0 gate dry run has passed.
+- GUI RC0 candidate is not release-ready GUI and not release-ready RC.
+- GUI work must follow [gui-entry-contract.md](gui-entry-contract.md).
+- Packaging and admin / elevation rules are documented in [packaging-contract.md](packaging-contract.md).
+- GUI work must not add runtime behavior, AppConfigV2, or new Macro DSL instructions.
+
+Allowed first-stage GUI planning scope:
 
 - load JSON config;
 - start/stop runtime;
@@ -240,17 +332,15 @@ Current GUI scope:
 - add/update/remove simple mappings;
 - add/update/remove macro mappings;
 - macro script validation through the shared DSL compiler;
-- reusable `MacroEditorControl` instead of editor behavior embedded in `MainWindow`;
-- macro line numbers and cursor status;
+- macro text editor v1;
 - structured macro diagnostics with line numbers from `MacroScriptCompiler`;
-- shared `MacroScriptLanguageCatalog` and `MacroScriptLanguageService` for script-safe key names, token classification, and editor hints;
-- always-visible completion suggestions from the shared DSL catalog;
-- Tab/double-click completion insertion;
-- context-aware completions for commands, wait durations, loop counts, key names, mouse buttons, coordinates, and flags;
-- completion key names are script-safe single tokens such as `caps_lock` and `arrow_left`, not space-containing display names;
 - save config through schema v1;
 - running reload through `RuntimeHost.ReloadAsync`;
 - explicit `target_process`, `hotkey`, and `tap_hold_ms` fields.
+- dry-run by default.
+- live-mode visible warning.
+- live-mode start confirmation before `RuntimeHostController.StartAsync`.
+- GUI RC0 manual smoke checklist in [gui-manual-smoke-checklist.md](gui-manual-smoke-checklist.md).
 
 Smoke test:
 

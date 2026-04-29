@@ -157,18 +157,13 @@ public static class KeyNameResolver
         }
 
         var normalized = button.Trim().ToLowerInvariant();
-        if (normalized.StartsWith("mouse_", StringComparison.OrdinalIgnoreCase))
-        {
-            return normalized;
-        }
-
         return normalized switch
         {
-            "left" => "mouse_left",
-            "right" => "mouse_right",
-            "middle" => "mouse_middle",
-            "x1" => "mouse_x1",
-            "x2" => "mouse_x2",
+            "mouse_left" or "left" => "mouse_left",
+            "mouse_right" or "right" => "mouse_right",
+            "mouse_middle" or "middle" => "mouse_middle",
+            "mouse_x1" or "x1" => "mouse_x1",
+            "mouse_x2" or "x2" => "mouse_x2",
             _ => throw new ArgumentException($"Unsupported mouse button: {button}", nameof(button))
         };
     }

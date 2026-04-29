@@ -1,0 +1,572 @@
+{
+  "Tool": "BAKeySmith.Acceptance",
+  "Runtime": ".NET",
+  "GeneratedAtUtc": "2026-04-26T16:44:42.3097324+00:00",
+  "Scenario": "bluearchive-manual-phase2a",
+  "BurstCount": 50,
+  "DrainTimeoutMs": 5000,
+  "SoakSeconds": 300,
+  "SoakRateHz": 20,
+  "Passed": true,
+  "DurationMs": 16441.969,
+  "Scenarios": [
+    {
+      "Name": "bluearchive-manual-phase2a",
+      "Passed": true,
+      "DurationMs": 16418.6208,
+      "Error": null,
+      "Metrics": {
+        "target_process": "BlueArchive.exe",
+        "target_process_id": 17312,
+        "target_window_title": "\u30D6\u30EB\u30FC\u30A2\u30FC\u30AB\u30A4\u30D6",
+        "validation_scope": "phase2a-full-sequence",
+        "manual_keyboard_trigger": "f8",
+        "manual_mouse_trigger": "mouse_middle",
+        "manual_reload_trigger": "f9",
+        "manual_long_macro_trigger": "f10",
+        "manual_long_macro_held_key": "escape",
+        "runner_elevation_known": true,
+        "runner_elevated": true,
+        "runner_elevated_state": "elevated",
+        "target_elevation_known": true,
+        "target_elevated": true,
+        "target_elevated_state": "elevated",
+        "runner_target_same_elevation": true,
+        "real_target_observed_scope": "keyboard_allowed,mouse_allowed,reload_new_trigger,disable_no_output,long_macro_cleanup",
+        "real_target_pending_scope": "",
+        "real_target_failed_scope": "",
+        "harness_observed_scope": "keyboard_blocked_pass_through,mouse_blocked_pass_through,reload_old_trigger_pass_through",
+        "harness_pending_scope": "",
+        "harness_failed_scope": "",
+        "keyboard_allowed_status": "passed",
+        "mouse_allowed_status": "passed",
+        "reload_new_trigger_status": "passed",
+        "disable_no_output_status": "passed",
+        "long_macro_cleanup_status": "passed",
+        "keyboard_blocked_pass_through_status": "passed",
+        "mouse_blocked_pass_through_status": "passed",
+        "reload_old_trigger_pass_through_status": "passed",
+        "manual_keyboard_confirmed": true,
+        "manual_mouse_confirmed": true,
+        "manual_reload_confirmed": true,
+        "manual_disable_confirmed": false,
+        "manual_long_macro_confirmed": true,
+        "phase2a_mode": "full_minimal",
+        "long_macro_failure_stage": "passed",
+        "long_macro_manual_observation_reached": true,
+        "long_macro_trigger_received": true,
+        "long_macro_trigger_received_count": 1,
+        "long_macro_pipeline_enqueued": true,
+        "long_macro_pipeline_enqueued_count": 1,
+        "long_macro_runtime_dispatched": true,
+        "long_macro_runtime_dispatched_count": 1,
+        "long_macro_runtime_foreground_allowed": true,
+        "long_macro_runtime_foreground_allowed_count": 1,
+        "long_macro_runtime_ignored": false,
+        "long_macro_runtime_ignored_count": 0,
+        "long_macro_runtime_ignored_reasons": "",
+        "long_macro_macro_scheduled": true,
+        "long_macro_macro_scheduled_count": 1,
+        "long_macro_macro_started": true,
+        "long_macro_macro_started_count": 1,
+        "long_macro_escape_down_emitted": true,
+        "long_macro_escape_down_count": 1,
+        "long_macro_escape_up_emitted": true,
+        "long_macro_escape_up_count": 1,
+        "long_macro_stop_requested": true,
+        "long_macro_stop_requested_count": 1,
+        "long_macro_cleanup_completed": true,
+        "long_macro_cleanup_completed_count": 1,
+        "stage_keyboard_allowed_entered": true,
+        "stage_keyboard_allowed_completed": true,
+        "stage_keyboard_allowed_manual_required": true,
+        "stage_keyboard_allowed_manual_confirmed": true,
+        "stage_keyboard_allowed_trigger_received_count": 1,
+        "stage_keyboard_allowed_pipeline_enqueued_count": 1,
+        "stage_keyboard_allowed_runtime_dispatched_count": 1,
+        "stage_keyboard_allowed_runtime_foreground_allowed_count": 1,
+        "stage_keyboard_allowed_runtime_ignored_count": 0,
+        "stage_keyboard_allowed_runtime_ignored_reasons": "",
+        "stage_keyboard_allowed_macro_scheduled_count": 0,
+        "stage_keyboard_allowed_macro_started_count": 0,
+        "stage_keyboard_allowed_escape_down_count": 1,
+        "stage_keyboard_allowed_escape_up_count": 1,
+        "stage_keyboard_allowed_blocked_pass_through_count": 0,
+        "stage_keyboard_allowed_blocked_pass_through_down": 0,
+        "stage_keyboard_allowed_blocked_pass_through_up": 0,
+        "stage_keyboard_allowed_output_delta": 2,
+        "stage_keyboard_allowed_stop_requested_count": 0,
+        "stage_keyboard_allowed_cleanup_completed_count": 0,
+        "stage_keyboard_allowed_failure_reason": "",
+        "stage_keyboard_blocked_entered": true,
+        "stage_keyboard_blocked_completed": true,
+        "stage_keyboard_blocked_manual_required": false,
+        "stage_keyboard_blocked_manual_confirmed": false,
+        "stage_keyboard_blocked_trigger_received_count": 1,
+        "stage_keyboard_blocked_pipeline_enqueued_count": 0,
+        "stage_keyboard_blocked_runtime_dispatched_count": 0,
+        "stage_keyboard_blocked_runtime_foreground_allowed_count": 0,
+        "stage_keyboard_blocked_runtime_ignored_count": 0,
+        "stage_keyboard_blocked_runtime_ignored_reasons": "",
+        "stage_keyboard_blocked_macro_scheduled_count": 0,
+        "stage_keyboard_blocked_macro_started_count": 0,
+        "stage_keyboard_blocked_escape_down_count": 0,
+        "stage_keyboard_blocked_escape_up_count": 0,
+        "stage_keyboard_blocked_blocked_pass_through_count": 1,
+        "stage_keyboard_blocked_blocked_pass_through_down": 0,
+        "stage_keyboard_blocked_blocked_pass_through_up": 0,
+        "stage_keyboard_blocked_output_delta": 0,
+        "stage_keyboard_blocked_stop_requested_count": 0,
+        "stage_keyboard_blocked_cleanup_completed_count": 0,
+        "stage_keyboard_blocked_failure_reason": "",
+        "stage_mouse_allowed_entered": true,
+        "stage_mouse_allowed_completed": true,
+        "stage_mouse_allowed_manual_required": true,
+        "stage_mouse_allowed_manual_confirmed": true,
+        "stage_mouse_allowed_trigger_received_count": 1,
+        "stage_mouse_allowed_pipeline_enqueued_count": 1,
+        "stage_mouse_allowed_runtime_dispatched_count": 1,
+        "stage_mouse_allowed_runtime_foreground_allowed_count": 1,
+        "stage_mouse_allowed_runtime_ignored_count": 0,
+        "stage_mouse_allowed_runtime_ignored_reasons": "",
+        "stage_mouse_allowed_macro_scheduled_count": 0,
+        "stage_mouse_allowed_macro_started_count": 0,
+        "stage_mouse_allowed_escape_down_count": 1,
+        "stage_mouse_allowed_escape_up_count": 1,
+        "stage_mouse_allowed_blocked_pass_through_count": 0,
+        "stage_mouse_allowed_blocked_pass_through_down": 0,
+        "stage_mouse_allowed_blocked_pass_through_up": 0,
+        "stage_mouse_allowed_output_delta": 2,
+        "stage_mouse_allowed_stop_requested_count": 0,
+        "stage_mouse_allowed_cleanup_completed_count": 0,
+        "stage_mouse_allowed_failure_reason": "",
+        "stage_mouse_blocked_entered": true,
+        "stage_mouse_blocked_completed": true,
+        "stage_mouse_blocked_manual_required": false,
+        "stage_mouse_blocked_manual_confirmed": false,
+        "stage_mouse_blocked_trigger_received_count": 1,
+        "stage_mouse_blocked_pipeline_enqueued_count": 0,
+        "stage_mouse_blocked_runtime_dispatched_count": 0,
+        "stage_mouse_blocked_runtime_foreground_allowed_count": 0,
+        "stage_mouse_blocked_runtime_ignored_count": 0,
+        "stage_mouse_blocked_runtime_ignored_reasons": "",
+        "stage_mouse_blocked_macro_scheduled_count": 0,
+        "stage_mouse_blocked_macro_started_count": 0,
+        "stage_mouse_blocked_escape_down_count": 0,
+        "stage_mouse_blocked_escape_up_count": 0,
+        "stage_mouse_blocked_blocked_pass_through_count": 1,
+        "stage_mouse_blocked_blocked_pass_through_down": 1,
+        "stage_mouse_blocked_blocked_pass_through_up": 1,
+        "stage_mouse_blocked_output_delta": 0,
+        "stage_mouse_blocked_stop_requested_count": 0,
+        "stage_mouse_blocked_cleanup_completed_count": 0,
+        "stage_mouse_blocked_failure_reason": "",
+        "stage_reload_old_trigger_blocked_entered": true,
+        "stage_reload_old_trigger_blocked_completed": true,
+        "stage_reload_old_trigger_blocked_manual_required": false,
+        "stage_reload_old_trigger_blocked_manual_confirmed": false,
+        "stage_reload_old_trigger_blocked_trigger_received_count": 1,
+        "stage_reload_old_trigger_blocked_pipeline_enqueued_count": 0,
+        "stage_reload_old_trigger_blocked_runtime_dispatched_count": 0,
+        "stage_reload_old_trigger_blocked_runtime_foreground_allowed_count": 0,
+        "stage_reload_old_trigger_blocked_runtime_ignored_count": 0,
+        "stage_reload_old_trigger_blocked_runtime_ignored_reasons": "",
+        "stage_reload_old_trigger_blocked_macro_scheduled_count": 0,
+        "stage_reload_old_trigger_blocked_macro_started_count": 0,
+        "stage_reload_old_trigger_blocked_escape_down_count": 0,
+        "stage_reload_old_trigger_blocked_escape_up_count": 0,
+        "stage_reload_old_trigger_blocked_blocked_pass_through_count": 1,
+        "stage_reload_old_trigger_blocked_blocked_pass_through_down": 1,
+        "stage_reload_old_trigger_blocked_blocked_pass_through_up": 1,
+        "stage_reload_old_trigger_blocked_output_delta": 0,
+        "stage_reload_old_trigger_blocked_stop_requested_count": 0,
+        "stage_reload_old_trigger_blocked_cleanup_completed_count": 0,
+        "stage_reload_old_trigger_blocked_failure_reason": "",
+        "stage_reload_new_trigger_allowed_entered": true,
+        "stage_reload_new_trigger_allowed_completed": true,
+        "stage_reload_new_trigger_allowed_manual_required": true,
+        "stage_reload_new_trigger_allowed_manual_confirmed": true,
+        "stage_reload_new_trigger_allowed_trigger_received_count": 1,
+        "stage_reload_new_trigger_allowed_pipeline_enqueued_count": 1,
+        "stage_reload_new_trigger_allowed_runtime_dispatched_count": 1,
+        "stage_reload_new_trigger_allowed_runtime_foreground_allowed_count": 1,
+        "stage_reload_new_trigger_allowed_runtime_ignored_count": 0,
+        "stage_reload_new_trigger_allowed_runtime_ignored_reasons": "",
+        "stage_reload_new_trigger_allowed_macro_scheduled_count": 0,
+        "stage_reload_new_trigger_allowed_macro_started_count": 0,
+        "stage_reload_new_trigger_allowed_escape_down_count": 1,
+        "stage_reload_new_trigger_allowed_escape_up_count": 1,
+        "stage_reload_new_trigger_allowed_blocked_pass_through_count": 0,
+        "stage_reload_new_trigger_allowed_blocked_pass_through_down": 0,
+        "stage_reload_new_trigger_allowed_blocked_pass_through_up": 0,
+        "stage_reload_new_trigger_allowed_output_delta": 2,
+        "stage_reload_new_trigger_allowed_stop_requested_count": 0,
+        "stage_reload_new_trigger_allowed_cleanup_completed_count": 0,
+        "stage_reload_new_trigger_allowed_failure_reason": "",
+        "stage_disable_no_output_entered": true,
+        "stage_disable_no_output_completed": true,
+        "stage_disable_no_output_manual_required": false,
+        "stage_disable_no_output_manual_confirmed": false,
+        "stage_disable_no_output_trigger_received_count": 1,
+        "stage_disable_no_output_pipeline_enqueued_count": 0,
+        "stage_disable_no_output_runtime_dispatched_count": 0,
+        "stage_disable_no_output_runtime_foreground_allowed_count": 0,
+        "stage_disable_no_output_runtime_ignored_count": 0,
+        "stage_disable_no_output_runtime_ignored_reasons": "",
+        "stage_disable_no_output_macro_scheduled_count": 0,
+        "stage_disable_no_output_macro_started_count": 0,
+        "stage_disable_no_output_escape_down_count": 0,
+        "stage_disable_no_output_escape_up_count": 0,
+        "stage_disable_no_output_blocked_pass_through_count": 0,
+        "stage_disable_no_output_blocked_pass_through_down": 0,
+        "stage_disable_no_output_blocked_pass_through_up": 0,
+        "stage_disable_no_output_output_delta": 0,
+        "stage_disable_no_output_stop_requested_count": 0,
+        "stage_disable_no_output_cleanup_completed_count": 0,
+        "stage_disable_no_output_failure_reason": "",
+        "stage_long_macro_only_entered": true,
+        "stage_long_macro_only_completed": true,
+        "stage_long_macro_only_manual_required": true,
+        "stage_long_macro_only_manual_confirmed": true,
+        "stage_long_macro_only_trigger_received_count": 1,
+        "stage_long_macro_only_pipeline_enqueued_count": 1,
+        "stage_long_macro_only_runtime_dispatched_count": 1,
+        "stage_long_macro_only_runtime_foreground_allowed_count": 1,
+        "stage_long_macro_only_runtime_ignored_count": 0,
+        "stage_long_macro_only_runtime_ignored_reasons": "",
+        "stage_long_macro_only_macro_scheduled_count": 1,
+        "stage_long_macro_only_macro_started_count": 1,
+        "stage_long_macro_only_escape_down_count": 1,
+        "stage_long_macro_only_escape_up_count": 1,
+        "stage_long_macro_only_blocked_pass_through_count": 0,
+        "stage_long_macro_only_blocked_pass_through_down": 0,
+        "stage_long_macro_only_blocked_pass_through_up": 0,
+        "stage_long_macro_only_output_delta": 2,
+        "stage_long_macro_only_stop_requested_count": 1,
+        "stage_long_macro_only_cleanup_completed_count": 1,
+        "stage_long_macro_only_failure_reason": "",
+        "phase2a_stage_sequence": "keyboard_allowed,keyboard_blocked,mouse_allowed,mouse_blocked,reload_old_trigger_blocked,reload_new_trigger_allowed,disable_no_output,long_macro_only",
+        "keyboard_escape_events": 2,
+        "keyboard_blocked_output_delta": 0,
+        "keyboard_blocked_pass_through": 1,
+        "mouse_reload_generation": 2,
+        "mouse_escape_events": 2,
+        "mouse_blocked_output_delta": 0,
+        "mouse_blocked_pass_through_down": 1,
+        "mouse_blocked_pass_through_up": 1,
+        "reload_generation": 3,
+        "reload_new_trigger_escape_events": 2,
+        "reload_old_trigger_output_delta": 0,
+        "reload_old_trigger_pass_through": 1,
+        "disable_output_delta": 0,
+        "long_macro_pipeline_pending": 0,
+        "long_macro_runtime_pending_actions": 0,
+        "long_macro_runtime_running_actions": 0,
+        "long_macro_runtime_active_workers": 0,
+        "long_macro_escape_down": 1,
+        "long_macro_escape_up": 1,
+        "foreground_process": "BlueArchive",
+        "blocked_foreground_process": "BAKeySmith.Acceptance",
+        "post_stop_events": 0,
+        "stop_ms": 3.9327,
+        "diagnostic_events": 17,
+        "stopped_clean": true,
+        "snapshot_after_mouse_reload": {
+          "IsStarted": true,
+          "IsPipelineRunning": true,
+          "Pipeline": {
+            "IsRunning": true,
+            "QueuedCount": 2,
+            "HandledCount": 2,
+            "DroppedCount": 0,
+            "PendingCount": 0
+          },
+          "RuntimeConfig": {
+            "TargetProcess": "BlueArchive.exe",
+            "TapHoldMilliseconds": 5,
+            "Mappings": [
+              {
+                "Id": "mapping:mouse:mouse_middle",
+                "Trigger": {
+                  "Device": "mouse",
+                  "Code": "mouse_middle",
+                  "NormalizedDevice": "mouse",
+                  "NormalizedCode": "mouse_middle",
+                  "Key": "mouse:mouse_middle"
+                },
+                "Action": {
+                  "Kind": "tap",
+                  "Key": "escape",
+                  "Macro": null,
+                  "NormalizedKind": "tap"
+                },
+                "NormalizedId": "mapping:mouse:mouse_middle"
+              }
+            ],
+            "TapHold": "00:00:00.0050000"
+          },
+          "Runtime": {
+            "State": "Enabled",
+            "Generation": 2,
+            "MappingCount": 1,
+            "ActiveWorkerCount": 1,
+            "PendingActionCount": 0,
+            "RunningActionCount": 0,
+            "LastForegroundAllowed": true,
+            "Presses": {
+              "KeyOwners": {},
+              "OwnerKeys": {},
+              "IsEmpty": true
+            }
+          }
+        },
+        "snapshot_after_reload": {
+          "IsStarted": true,
+          "IsPipelineRunning": true,
+          "Pipeline": {
+            "IsRunning": true,
+            "QueuedCount": 4,
+            "HandledCount": 4,
+            "DroppedCount": 0,
+            "PendingCount": 0
+          },
+          "RuntimeConfig": {
+            "TargetProcess": "BlueArchive.exe",
+            "TapHoldMilliseconds": 5,
+            "Mappings": [
+              {
+                "Id": "mapping:keyboard:f9",
+                "Trigger": {
+                  "Device": "keyboard",
+                  "Code": "f9",
+                  "NormalizedDevice": "keyboard",
+                  "NormalizedCode": "f9",
+                  "Key": "keyboard:f9"
+                },
+                "Action": {
+                  "Kind": "tap",
+                  "Key": "escape",
+                  "Macro": null,
+                  "NormalizedKind": "tap"
+                },
+                "NormalizedId": "mapping:keyboard:f9"
+              }
+            ],
+            "TapHold": "00:00:00.0050000"
+          },
+          "Runtime": {
+            "State": "Enabled",
+            "Generation": 3,
+            "MappingCount": 1,
+            "ActiveWorkerCount": 1,
+            "PendingActionCount": 0,
+            "RunningActionCount": 0,
+            "LastForegroundAllowed": true,
+            "Presses": {
+              "KeyOwners": {},
+              "OwnerKeys": {},
+              "IsEmpty": true
+            }
+          }
+        },
+        "snapshot_disabled": {
+          "IsStarted": true,
+          "IsPipelineRunning": true,
+          "Pipeline": {
+            "IsRunning": true,
+            "QueuedCount": 6,
+            "HandledCount": 6,
+            "DroppedCount": 0,
+            "PendingCount": 0
+          },
+          "RuntimeConfig": {
+            "TargetProcess": "BlueArchive.exe",
+            "TapHoldMilliseconds": 5,
+            "Mappings": [
+              {
+                "Id": "mapping:keyboard:f9",
+                "Trigger": {
+                  "Device": "keyboard",
+                  "Code": "f9",
+                  "NormalizedDevice": "keyboard",
+                  "NormalizedCode": "f9",
+                  "Key": "keyboard:f9"
+                },
+                "Action": {
+                  "Kind": "tap",
+                  "Key": "escape",
+                  "Macro": null,
+                  "NormalizedKind": "tap"
+                },
+                "NormalizedId": "mapping:keyboard:f9"
+              }
+            ],
+            "TapHold": "00:00:00.0050000"
+          },
+          "Runtime": {
+            "State": "Disabled",
+            "Generation": 3,
+            "MappingCount": 1,
+            "ActiveWorkerCount": 0,
+            "PendingActionCount": 0,
+            "RunningActionCount": 0,
+            "LastForegroundAllowed": true,
+            "Presses": {
+              "KeyOwners": {},
+              "OwnerKeys": {},
+              "IsEmpty": true
+            }
+          }
+        },
+        "snapshot_before_long_macro_stop": {
+          "IsStarted": true,
+          "IsPipelineRunning": true,
+          "Pipeline": {
+            "IsRunning": true,
+            "QueuedCount": 6,
+            "HandledCount": 6,
+            "DroppedCount": 0,
+            "PendingCount": 0
+          },
+          "RuntimeConfig": {
+            "TargetProcess": "BlueArchive.exe",
+            "TapHoldMilliseconds": 5,
+            "Mappings": [
+              {
+                "Id": "mapping:keyboard:f10",
+                "Trigger": {
+                  "Device": "keyboard",
+                  "Code": "f10",
+                  "NormalizedDevice": "keyboard",
+                  "NormalizedCode": "f10",
+                  "Key": "keyboard:f10"
+                },
+                "Action": {
+                  "Kind": "macro",
+                  "Key": null,
+                  "Macro": [
+                    {
+                      "Op": "press",
+                      "Args": [
+                        "escape"
+                      ],
+                      "Line": 1,
+                      "NormalizedOp": "press"
+                    },
+                    {
+                      "Op": "wait",
+                      "Args": [
+                        "5000"
+                      ],
+                      "Line": 2,
+                      "NormalizedOp": "wait"
+                    },
+                    {
+                      "Op": "release",
+                      "Args": [
+                        "escape"
+                      ],
+                      "Line": 3,
+                      "NormalizedOp": "release"
+                    }
+                  ],
+                  "NormalizedKind": "macro"
+                },
+                "NormalizedId": "mapping:keyboard:f10"
+              }
+            ],
+            "TapHold": "00:00:00.0050000"
+          },
+          "Runtime": {
+            "State": "Enabled",
+            "Generation": 4,
+            "MappingCount": 1,
+            "ActiveWorkerCount": 1,
+            "PendingActionCount": 0,
+            "RunningActionCount": 0,
+            "LastForegroundAllowed": true,
+            "Presses": {
+              "KeyOwners": {},
+              "OwnerKeys": {},
+              "IsEmpty": true
+            }
+          }
+        },
+        "snapshot_stopped": {
+          "IsStarted": false,
+          "IsPipelineRunning": false,
+          "Pipeline": {
+            "IsRunning": false,
+            "QueuedCount": 7,
+            "HandledCount": 7,
+            "DroppedCount": 0,
+            "PendingCount": 0
+          },
+          "RuntimeConfig": {
+            "TargetProcess": "BlueArchive.exe",
+            "TapHoldMilliseconds": 5,
+            "Mappings": [
+              {
+                "Id": "mapping:keyboard:f10",
+                "Trigger": {
+                  "Device": "keyboard",
+                  "Code": "f10",
+                  "NormalizedDevice": "keyboard",
+                  "NormalizedCode": "f10",
+                  "Key": "keyboard:f10"
+                },
+                "Action": {
+                  "Kind": "macro",
+                  "Key": null,
+                  "Macro": [
+                    {
+                      "Op": "press",
+                      "Args": [
+                        "escape"
+                      ],
+                      "Line": 1,
+                      "NormalizedOp": "press"
+                    },
+                    {
+                      "Op": "wait",
+                      "Args": [
+                        "5000"
+                      ],
+                      "Line": 2,
+                      "NormalizedOp": "wait"
+                    },
+                    {
+                      "Op": "release",
+                      "Args": [
+                        "escape"
+                      ],
+                      "Line": 3,
+                      "NormalizedOp": "release"
+                    }
+                  ],
+                  "NormalizedKind": "macro"
+                },
+                "NormalizedId": "mapping:keyboard:f10"
+              }
+            ],
+            "TapHold": "00:00:00.0050000"
+          },
+          "Runtime": {
+            "State": "Stopped",
+            "Generation": 4,
+            "MappingCount": 1,
+            "ActiveWorkerCount": 0,
+            "PendingActionCount": 0,
+            "RunningActionCount": 0,
+            "LastForegroundAllowed": true,
+            "Presses": {
+              "KeyOwners": {},
+              "OwnerKeys": {},
+              "IsEmpty": true
+            }
+          }
+        }
+      }
+    }
+  ]
+}

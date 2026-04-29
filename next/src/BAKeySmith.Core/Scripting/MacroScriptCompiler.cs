@@ -151,6 +151,10 @@ public sealed class MacroScriptCompiler
             button = parsedButton;
             working.RemoveAt(working.Count - 1);
         }
+        else if (working.Count >= 3 && LooksLikeMouseToken(working[^1]))
+        {
+            throw new ArgumentException($"Unsupported mouse button: {working[^1]}");
+        }
 
         if (working.Count != 2)
         {
@@ -177,6 +181,10 @@ public sealed class MacroScriptCompiler
             button = parsedButton;
             working.RemoveAt(working.Count - 1);
         }
+        else if (working.Count >= 3 && LooksLikeMouseToken(working[^1]))
+        {
+            throw new ArgumentException($"Unsupported mouse button: {working[^1]}");
+        }
 
         if (working.Count != 2)
         {
@@ -200,6 +208,11 @@ public sealed class MacroScriptCompiler
             return mouseButton;
         }
 
+        if (KeyNameResolver.IsMouseTrigger(name))
+        {
+            throw new ArgumentException($"Unsupported mouse button: {name}");
+        }
+
         return KeyNameResolver.ResolveKeyboardKey(name).Name;
     }
 
@@ -221,6 +234,13 @@ public sealed class MacroScriptCompiler
     {
         var index = line.IndexOf('#');
         return index < 0 ? line : line[..index];
+    }
+
+    private static bool LooksLikeMouseToken(string value)
+    {
+        var normalized = value.Trim().ToLowerInvariant();
+        return normalized.StartsWith("mouse_", StringComparison.OrdinalIgnoreCase) ||
+            normalized is "wheel_up" or "wheel_down" or "wheelup" or "wheeldown";
     }
 
     private static void RequireArgCount(string command, string[] args, int expected)

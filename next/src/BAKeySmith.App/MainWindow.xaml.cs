@@ -1,36 +1,48 @@
 using System.IO;
-using System.Collections.ObjectModel;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Input;
+using System.Windows.Media;
 using System.Windows.Threading;
+using BAKeySmith.App.Services;
+using BAKeySmith.App.ViewModels;
 using BAKeySmith.Core.Configuration;
-using BAKeySmith.Core.Contracts;
 using BAKeySmith.Core.Diagnostics;
-using BAKeySmith.Core.Foreground;
-using BAKeySmith.Core.Hosting;
-using BAKeySmith.Core.Input;
-using BAKeySmith.Core.Triggers;
 using Microsoft.Win32;
 
 namespace BAKeySmith.App;
 
 public partial class MainWindow : Window
 {
-    private readonly EventDiagnosticsSink _diagnostics = new();
-    private readonly ObservableCollection<MappingEditorRow> _mappingRows = new();
+    private readonly MainWindowViewModel _viewModel = new();
+    private readonly RuntimeHostController _runtimeController = new();
     private readonly DispatcherTimer _statusTimer;
-    private RuntimeHost? _host;
-    private ManualTriggerSource? _manualSource;
-    private DryRunInputBackend? _dryRunBackend;
-    private AppConfigV1 _currentConfig = new();
-    private bool _isRunning;
+    private bool _keyCaptureArmed;
 
     public MainWindow()
     {
         InitializeComponent();
-        ConfigPathBox.Text = FindDefaultConfigPath();
-        MappingsGrid.ItemsSource = _mappingRows;
-        _diagnostics.Emitted += Diagnostics_Emitted;
+        PreviewKeyDown += MainWindow_PreviewKeyDown;
+        PreviewMouseDown += MainWindow_PreviewMouseDown;
+        _viewModel.ConfigureRuntimeCommands(
+            () => RunGuardedAsync(async () =>
+            {
+                await _viewModel.ExecuteStartWithLiveConfirmationAsync(
+                    ConfirmLiveStart,
+                    StartRuntimeAsync);
+            }),
+            () => RunGuardedAsync(StopHostAsync),
+            () => RunGuardedAsync(ReloadConfigAsync),
+            () =>
+            {
+                UpdateStats();
+                AppendLog("snapshot.refreshed", "Runtime snapshot refreshed.");
+            },
+            () => RunGuardedAsync(ProbeForegroundAsync),
+            () => Simulate("down"),
+            () => Simulate("up"));
+        DataContext = _viewModel;
+        _runtimeController.DiagnosticEmitted += RuntimeController_DiagnosticEmitted;
         _statusTimer = new DispatcherTimer
         {
             Interval = TimeSpan.FromMilliseconds(500)
@@ -42,73 +54,58 @@ public partial class MainWindow : Window
         AppendLog("app.ready", "GUI shell initialized.");
     }
 
-    private async void Start_Click(object sender, RoutedEventArgs e)
+    private bool ConfirmLiveStart()
     {
-        await RunGuardedAsync(async () =>
-        {
-            await StopHostAsync();
+        var result = MessageBox.Show(
+            this,
+            "Live 模式会安装全局 hook，并向系统发送真实输入。\n\n" +
+            "只应在你已经准备测试时启用。\n\n" +
+            "继续前请确认目标进程和当前前台窗口状态正确。",
+            "确认启动 Live Runtime",
+            MessageBoxButton.OKCancel,
+            MessageBoxImage.Warning,
+            MessageBoxResult.Cancel);
 
-            var appConfig = BuildConfigFromEditor(validate: true);
-
-            var dryRun = DryRunCheck.IsChecked == true;
-            IInputBackend inputBackend;
-            IForegroundGate foregroundGate;
-            ITriggerSource triggerSource;
-            if (dryRun)
-            {
-                _dryRunBackend = new DryRunInputBackend();
-                _manualSource = new ManualTriggerSource();
-                inputBackend = _dryRunBackend;
-                foregroundGate = AllowForegroundCheck.IsChecked == true
-                    ? AlwaysForegroundGate.Instance
-                    : new ManualForegroundGate { IsAllowed = true };
-                triggerSource = _manualSource;
-            }
-            else
-            {
-                _dryRunBackend = null;
-                _manualSource = null;
-                inputBackend = new WindowsInputBackend();
-                foregroundGate = new WindowsForegroundGate();
-                triggerSource = new WindowsHookTriggerSource();
-            }
-
-            _host = new RuntimeHost(
-                appConfig,
-                inputBackend,
-                foregroundGate,
-                triggerSource,
-                _diagnostics);
-            await _host.StartAsync(CancellationToken.None);
-            _isRunning = true;
-            SetRunningState(true);
-            UpdateStats();
-        });
+        return result == MessageBoxResult.OK;
     }
 
-    private async void Stop_Click(object sender, RoutedEventArgs e)
+    private async Task StartRuntimeAsync()
     {
-        await RunGuardedAsync(StopHostAsync);
+        var appConfig = BuildConfigFromEditor(validate: true);
+        await _runtimeController.StartAsync(
+            appConfig,
+            _viewModel.IsDryRun,
+            _viewModel.AllowAnyForeground,
+            CancellationToken.None);
+        SetRunningState(true);
+        UpdateStats();
     }
 
-    private async void Reload_Click(object sender, RoutedEventArgs e)
+    private async Task ReloadConfigAsync()
     {
-        await RunGuardedAsync(async () =>
+        var appConfig = BuildConfigFromEditor(validate: true);
+
+        if (!_runtimeController.IsRunning)
         {
-            var appConfig = BuildConfigFromEditor(validate: true);
-
-            if (_host is null || !_isRunning)
-            {
-                var runtimeConfig = AppConfigSerializer.ToRuntimeConfig(appConfig, [], []);
-                AppendLog("host.reload.skipped", "Runtime is not running; config will load on next start.");
-                MappingCountText.Text = runtimeConfig.Mappings.Count.ToString();
-                TargetText.Text = runtimeConfig.TargetProcess;
-                return;
-            }
-
-            await _host.ReloadAsync(appConfig, CancellationToken.None);
+            _viewModel.ValidateConfig(appConfig);
+            AppendLog("host.reload.skipped", "Runtime is not running; config will load on next start.");
             UpdateStats();
-        });
+            return;
+        }
+
+        await _runtimeController.ReloadAsync(appConfig, CancellationToken.None);
+        UpdateStats();
+    }
+
+    private async Task ProbeForegroundAsync()
+    {
+        var result = await _runtimeController.CheckForegroundAsync(
+            _viewModel.BuildFallbackRuntimeConfig(),
+            CancellationToken.None);
+
+        _viewModel.ApplyForegroundProbe(result);
+        AppendLog("foreground.probe",
+            $"allowed={result.IsAllowed} target={result.TargetProcess ?? "-"} foreground={result.ForegroundProcess ?? "-"}");
     }
 
     private void BrowseConfig_Click(object sender, RoutedEventArgs e)
@@ -116,15 +113,15 @@ public partial class MainWindow : Window
         var dialog = new OpenFileDialog
         {
             Filter = "JSON config (*.json)|*.json|All files (*.*)|*.*",
-            FileName = Path.GetFileName(ConfigPathBox.Text),
-            InitialDirectory = Directory.Exists(Path.GetDirectoryName(ConfigPathBox.Text))
-                ? Path.GetDirectoryName(ConfigPathBox.Text)
+            FileName = Path.GetFileName(_viewModel.ConfigPath),
+            InitialDirectory = Directory.Exists(Path.GetDirectoryName(_viewModel.ConfigPath))
+                ? Path.GetDirectoryName(_viewModel.ConfigPath)
                 : Environment.CurrentDirectory
         };
 
         if (dialog.ShowDialog(this) == true)
         {
-            ConfigPathBox.Text = dialog.FileName;
+            _viewModel.ConfigPath = dialog.FileName;
             LoadConfigIntoEditor(logResult: true);
         }
     }
@@ -139,73 +136,21 @@ public partial class MainWindow : Window
         await RunGuardedAsync(async () =>
         {
             var config = BuildConfigFromEditor(validate: true);
-            var path = ConfigPathBox.Text.Trim();
-            if (string.IsNullOrWhiteSpace(path))
-            {
-                throw new InvalidOperationException("请先选择配置文件路径。");
-            }
-
-            var directory = Path.GetDirectoryName(path);
-            if (!string.IsNullOrWhiteSpace(directory))
-            {
-                Directory.CreateDirectory(directory);
-            }
-
-            await File.WriteAllTextAsync(path, AppConfigSerializer.Save(config));
-            _currentConfig = config;
+            var path = _viewModel.ConfigPath.Trim();
+            await _viewModel.SaveConfigAsync(
+                path,
+                config,
+                createBackup: true,
+                CancellationToken.None);
             AppendLog("config.saved", path);
 
-            if (_host is not null && _isRunning)
+            if (_runtimeController.IsRunning)
             {
-                await _host.ReloadAsync(config, CancellationToken.None);
+                await _runtimeController.ReloadAsync(config, CancellationToken.None);
                 AppendLog("host.reloaded", "Runtime reloaded from saved config.");
             }
 
             UpdateStats();
-        });
-    }
-
-    private void SimulateDown_Click(object sender, RoutedEventArgs e)
-    {
-        Simulate("down");
-    }
-
-    private void SimulateUp_Click(object sender, RoutedEventArgs e)
-    {
-        Simulate("up");
-    }
-
-    private void ClearLog_Click(object sender, RoutedEventArgs e)
-    {
-        DiagnosticsList.Items.Clear();
-    }
-
-    private void RefreshStatus_Click(object sender, RoutedEventArgs e)
-    {
-        UpdateStats();
-        AppendLog("snapshot.refreshed", "Runtime snapshot refreshed.");
-    }
-
-    private async void ProbeForeground_Click(object sender, RoutedEventArgs e)
-    {
-        await RunGuardedAsync(async () =>
-        {
-            var result = _host is not null
-                ? await _host.CheckForegroundAsync(CancellationToken.None)
-                : await new WindowsForegroundGate().CheckAsync(
-                    new RuntimeConfig(
-                        string.IsNullOrWhiteSpace(TargetProcessBox.Text)
-                            ? "BlueArchive.exe"
-                            : TargetProcessBox.Text.Trim(),
-                        ParseTapHoldMilliseconds(),
-                        Array.Empty<MappingDefinition>()),
-                    CancellationToken.None);
-
-            ForegroundProbeText.Text =
-                $"allowed={result.IsAllowed} target={result.TargetProcess ?? "-"} foreground={result.ForegroundProcess ?? "-"} title={result.ForegroundWindowTitle ?? "-"}";
-            ForegroundStateText.Text = result.IsAllowed ? "allowed" : "blocked";
-            AppendLog("foreground.probe",
-                $"allowed={result.IsAllowed} target={result.TargetProcess ?? "-"} foreground={result.ForegroundProcess ?? "-"}");
         });
     }
 
@@ -214,268 +159,148 @@ public partial class MainWindow : Window
         UpdateModeVisuals();
     }
 
-    private void MappingsGrid_SelectionChanged(object sender, SelectionChangedEventArgs e)
-    {
-        if (MappingsGrid.SelectedItem is MappingEditorRow row)
-        {
-            FillMappingForm(row);
-        }
-    }
-
     private void MappingTypeCombo_SelectionChanged(object sender, SelectionChangedEventArgs e)
     {
         UpdateMappingFormVisibility();
     }
 
-    private void AddMapping_Click(object sender, RoutedEventArgs e)
+    private void MacroDiagnosticsList_MouseDoubleClick(object sender, MouseButtonEventArgs e)
     {
-        RunGuardedSync(() =>
+        if (MacroDiagnosticsList.SelectedItem is MacroDiagnosticDisplayItem { Line: > 0 } item)
         {
-            var row = ReadMappingForm();
-            if (_mappingRows.Any(existing =>
-                    string.Equals(existing.Trigger, row.Trigger, StringComparison.OrdinalIgnoreCase)))
-            {
-                throw new InvalidOperationException($"触发键重复: {row.Trigger}");
-            }
-
-            _mappingRows.Add(row);
-            MappingsGrid.SelectedItem = row;
-            UpdateStats();
-        });
+            MacroEditor.GoToLine(item.Line);
+        }
     }
 
-    private void UpdateMapping_Click(object sender, RoutedEventArgs e)
+    private void BeginMappingTriggerCapture_Click(object sender, RoutedEventArgs e)
     {
-        RunGuardedSync(() =>
+        if (_viewModel.BeginMappingTriggerCapture())
         {
-            if (MappingsGrid.SelectedItem is not MappingEditorRow selected)
-            {
-                throw new InvalidOperationException("请先选择要更新的映射。");
-            }
-
-            var row = ReadMappingForm();
-            if (_mappingRows.Any(existing =>
-                    !ReferenceEquals(existing, selected) &&
-                    string.Equals(existing.Trigger, row.Trigger, StringComparison.OrdinalIgnoreCase)))
-            {
-                throw new InvalidOperationException($"触发键重复: {row.Trigger}");
-            }
-
-            var index = _mappingRows.IndexOf(selected);
-            _mappingRows[index] = row;
-            MappingsGrid.SelectedItem = row;
-            UpdateStats();
-        });
+            ArmKeyCaptureAfterCurrentInput();
+        }
     }
 
-    private void RemoveMapping_Click(object sender, RoutedEventArgs e)
+    private void BeginHotkeyCapture_Click(object sender, RoutedEventArgs e)
     {
-        RunGuardedSync(() =>
+        if (_viewModel.BeginHotkeyCapture())
         {
-            if (MappingsGrid.SelectedItem is not MappingEditorRow selected)
-            {
-                throw new InvalidOperationException("请先选择要删除的映射。");
-            }
-
-            _mappingRows.Remove(selected);
-            ClearMappingForm();
-            UpdateStats();
-        });
+            ArmKeyCaptureAfterCurrentInput();
+        }
     }
 
-    private void ClearMappingForm_Click(object sender, RoutedEventArgs e)
+    private void BeginMappingTargetCapture_Click(object sender, RoutedEventArgs e)
     {
-        ClearMappingForm();
+        if (_viewModel.BeginMappingTargetCapture())
+        {
+            ArmKeyCaptureAfterCurrentInput();
+        }
+    }
+
+    private void CancelKeyCapture_Click(object sender, RoutedEventArgs e)
+    {
+        _keyCaptureArmed = false;
+        _viewModel.CancelKeyCapture();
+    }
+
+    private void MainWindow_PreviewKeyDown(object sender, KeyEventArgs e)
+    {
+        if (!_keyCaptureArmed || !_viewModel.IsCapturingKey)
+        {
+            return;
+        }
+
+        var effectiveKey = KeyCaptureFormatter.GetEffectiveKey(
+            e.Key,
+            e.SystemKey,
+            e.ImeProcessedKey,
+            e.DeadCharProcessedKey);
+        var result = _viewModel.IsCapturingHotkey
+            ? KeyCaptureFormatter.FormatHotkey(effectiveKey, Keyboard.Modifiers)
+            : _viewModel.IsCapturingMappingTarget
+                ? KeyCaptureFormatter.FormatMappingTarget(effectiveKey)
+                : KeyCaptureFormatter.FormatMappingTrigger(effectiveKey);
+
+        _viewModel.ApplyKeyCaptureResult(result);
+        _keyCaptureArmed = _viewModel.IsCapturingKey;
+        e.Handled = true;
+    }
+
+    private void MainWindow_PreviewMouseDown(object sender, MouseButtonEventArgs e)
+    {
+        if (!_keyCaptureArmed ||
+            (!_viewModel.IsCapturingMappingTrigger && !_viewModel.IsCapturingMappingTarget) ||
+            IsFromCaptureControl(e.OriginalSource))
+        {
+            return;
+        }
+
+        var result = _viewModel.IsCapturingMappingTarget
+            ? KeyCaptureFormatter.FormatMappingTarget(e.ChangedButton)
+            : KeyCaptureFormatter.FormatMappingTrigger(e.ChangedButton);
+        _viewModel.ApplyKeyCaptureResult(result);
+        _keyCaptureArmed = _viewModel.IsCapturingKey;
+        e.Handled = true;
     }
 
     protected override async void OnClosed(EventArgs e)
     {
         _statusTimer.Stop();
-        _diagnostics.Emitted -= Diagnostics_Emitted;
-        await StopHostAsync();
-        if (_host is not null)
-        {
-            await _host.DisposeAsync();
-        }
-
+        PreviewKeyDown -= MainWindow_PreviewKeyDown;
+        PreviewMouseDown -= MainWindow_PreviewMouseDown;
+        _runtimeController.DiagnosticEmitted -= RuntimeController_DiagnosticEmitted;
+        await _runtimeController.DisposeAsync();
         base.OnClosed(e);
     }
 
     private async Task StopHostAsync()
     {
-        if (_host is not null)
-        {
-            await _host.StopAsync(CancellationToken.None);
-            await _host.DisposeAsync();
-            _host = null;
-        }
-
-        _isRunning = false;
-        _manualSource = null;
-        _dryRunBackend = null;
+        await _runtimeController.StopAsync(CancellationToken.None);
         SetRunningState(false);
         UpdateStats();
     }
 
     private void LoadConfigIntoEditor(bool logResult)
     {
-        var path = ConfigPathBox.Text.Trim();
-        if (!File.Exists(path))
+        var path = _viewModel.ConfigPath.Trim();
+        var document = _viewModel.LoadConfig(path);
+        if (!document.Success)
         {
-            _currentConfig = new AppConfigV1();
-            TargetProcessBox.Text = _currentConfig.TargetProcess;
-            HotkeyBox.Text = _currentConfig.Hotkey;
-            TapHoldBox.Text = _currentConfig.TapHoldMilliseconds.ToString("0.###");
-            _mappingRows.Clear();
-            if (logResult)
-            {
-                AppendLog("config.default", $"Config does not exist; editing an empty config: {path}");
-            }
-
-            UpdateStats();
-            return;
+            throw new InvalidOperationException(string.Join(Environment.NewLine, document.Errors));
         }
 
-        var result = AppConfigSerializer.Parse(File.ReadAllText(path));
-        if (!result.Success)
-        {
-            throw new InvalidOperationException(string.Join(Environment.NewLine, result.Errors));
-        }
-
-        _currentConfig = result.Config;
-        TargetProcessBox.Text = _currentConfig.TargetProcess;
-        HotkeyBox.Text = _currentConfig.Hotkey;
-        TapHoldBox.Text = _currentConfig.TapHoldMilliseconds.ToString("0.###");
-        _mappingRows.Clear();
-        foreach (var mapping in _currentConfig.Mappings)
-        {
-            _mappingRows.Add(MappingEditorRow.FromConfig(mapping));
-        }
-
-        foreach (var warning in result.Warnings)
+        foreach (var warning in document.Warnings)
         {
             AppendLog("config.warning", warning);
         }
 
         if (logResult)
         {
-            AppendLog("config.loaded", $"{path} mappings={_mappingRows.Count}");
+            AppendLog("config.loaded", $"{path} mappings={_viewModel.MappingEditor.Mappings.Count}");
         }
 
-        ClearMappingForm();
+        _viewModel.MappingEditor.ClearEditorForm();
         UpdateStats();
     }
 
     private AppConfigV1 BuildConfigFromEditor(bool validate)
     {
-        var config = _currentConfig with
-        {
-            Version = 1,
-            TargetProcess = string.IsNullOrWhiteSpace(TargetProcessBox.Text)
-                ? "BlueArchive.exe"
-                : TargetProcessBox.Text.Trim(),
-            Hotkey = string.IsNullOrWhiteSpace(HotkeyBox.Text)
-                ? "ctrl+shift+f12"
-                : HotkeyBox.Text.Trim(),
-            TapHoldMilliseconds = ParseTapHoldMilliseconds(),
-            Mappings = _mappingRows.Select(row => row.ToConfig()).ToArray()
-        };
+        var config = _viewModel.BuildConfigFromEditor();
 
         if (validate)
         {
-            var errors = new List<string>();
-            var warnings = new List<string>();
-            _ = AppConfigSerializer.ToRuntimeConfig(config, errors, warnings);
-            if (errors.Count > 0)
+            var validation = _viewModel.ValidateConfig(config);
+            if (validation.Errors.Count > 0)
             {
-                throw new InvalidOperationException(string.Join(Environment.NewLine, errors));
+                throw new InvalidOperationException(string.Join(Environment.NewLine, validation.Errors));
             }
 
-            foreach (var warning in warnings)
+            foreach (var warning in validation.Warnings)
             {
                 AppendLog("config.warning", warning);
             }
         }
 
         return config;
-    }
-
-    private double ParseTapHoldMilliseconds()
-    {
-        if (!double.TryParse(TapHoldBox.Text.Trim(), out var tapHold) || tapHold < 0)
-        {
-            throw new InvalidOperationException("Tap 持续时间必须是非负数字。");
-        }
-
-        return tapHold;
-    }
-
-    private MappingEditorRow ReadMappingForm()
-    {
-        var trigger = MappingTriggerBox.Text.Trim();
-        if (string.IsNullOrWhiteSpace(trigger))
-        {
-            throw new InvalidOperationException("触发键不能为空。");
-        }
-
-        var type = ComboText(MappingTypeCombo, "simple");
-        var mode = ComboText(MappingModeCombo, "hold");
-        if (type == "macro")
-        {
-            var script = MacroEditor.ScriptText;
-            var result = MacroEditor.ValidateScript();
-            if (!result.Success)
-            {
-                throw new InvalidOperationException(string.Join(Environment.NewLine, result.Errors));
-            }
-
-            return new MappingEditorRow
-            {
-                Trigger = trigger,
-                Type = "macro",
-                Mode = string.Empty,
-                Target = string.Empty,
-                Script = script
-            };
-        }
-
-        var target = MappingTargetBox.Text.Trim();
-        if (string.IsNullOrWhiteSpace(target))
-        {
-            throw new InvalidOperationException("simple 映射需要目标键。");
-        }
-
-        return new MappingEditorRow
-        {
-            Trigger = trigger,
-            Type = "simple",
-            Mode = mode,
-            Target = target,
-            Script = string.Empty
-        };
-    }
-
-    private void FillMappingForm(MappingEditorRow row)
-    {
-        MappingTriggerBox.Text = row.Trigger;
-        MappingTargetBox.Text = row.Target;
-        MacroEditor.ScriptText = string.IsNullOrWhiteSpace(row.Script)
-            ? "loop 2\ntap esc\nend"
-            : row.Script;
-        SetComboText(MappingTypeCombo, string.IsNullOrWhiteSpace(row.Type) ? "simple" : row.Type);
-        SetComboText(MappingModeCombo, string.IsNullOrWhiteSpace(row.Mode) ? "hold" : row.Mode);
-        UpdateMappingFormVisibility();
-    }
-
-    private void ClearMappingForm()
-    {
-        MappingsGrid.SelectedItem = null;
-        MappingTriggerBox.Text = "q";
-        MappingTargetBox.Text = "1";
-        MacroEditor.ScriptText = "loop 2\ntap esc\nend";
-        SetComboText(MappingTypeCombo, "simple");
-        SetComboText(MappingModeCombo, "hold");
-        UpdateMappingFormVisibility();
     }
 
     private void UpdateMappingFormVisibility()
@@ -485,50 +310,29 @@ public partial class MainWindow : Window
             return;
         }
 
-        var macro = ComboText(MappingTypeCombo, "simple") == "macro";
+        var macro = _viewModel.MappingEditor.IsEditingMacro;
         MappingTargetBox.IsEnabled = !macro;
+        MappingTargetCaptureButton.IsEnabled = !macro;
         MappingModeCombo.IsEnabled = !macro;
         MacroEditor.IsEnabled = macro;
     }
 
     private void Simulate(string phase)
     {
-        if (_manualSource is null || !_isRunning)
-        {
-            AppendLog("simulate.ignored", "Dry-run runtime is not running.");
-            return;
-        }
-
-        var code = SimulateCodeBox.Text.Trim();
+        var code = _viewModel.SimulateCode.Trim();
         if (string.IsNullOrWhiteSpace(code))
         {
             AppendLog("simulate.ignored", "Empty trigger code.");
             return;
         }
 
-        var isMouse = code.StartsWith("mouse_", StringComparison.OrdinalIgnoreCase);
-        if (phase == "down")
+        if (!_runtimeController.IsRunning)
         {
-            if (isMouse)
-            {
-                _manualSource.MouseDown(code);
-            }
-            else
-            {
-                _manualSource.KeyDown(code);
-            }
+            AppendLog("simulate.ignored", "Dry-run runtime is not running.");
+            return;
         }
-        else
-        {
-            if (isMouse)
-            {
-                _manualSource.MouseUp(code);
-            }
-            else
-            {
-                _manualSource.KeyUp(code);
-            }
-        }
+
+        _runtimeController.Simulate(code, phase);
     }
 
     private async Task RunGuardedAsync(Func<Task> action)
@@ -536,10 +340,12 @@ public partial class MainWindow : Window
         try
         {
             SetBusy(true);
+            _viewModel.ClearLastError();
             await action();
         }
         catch (Exception ex)
         {
+            _viewModel.SetLastError(ex.Message);
             AppendLog("error", ex.Message);
             MessageBox.Show(this, ex.Message, "BA KeySmith Next", MessageBoxButton.OK, MessageBoxImage.Error);
         }
@@ -554,10 +360,12 @@ public partial class MainWindow : Window
     {
         try
         {
+            _viewModel.ClearLastError();
             action();
         }
         catch (Exception ex)
         {
+            _viewModel.SetLastError(ex.Message);
             AppendLog("error", ex.Message);
             MessageBox.Show(this, ex.Message, "BA KeySmith Next", MessageBoxButton.OK, MessageBoxImage.Error);
         }
@@ -567,7 +375,7 @@ public partial class MainWindow : Window
         }
     }
 
-    private void Diagnostics_Emitted(object? sender, DiagnosticEvent diagnosticEvent)
+    private void RuntimeController_DiagnosticEmitted(object? sender, DiagnosticEvent diagnosticEvent)
     {
         Dispatcher.Invoke(() =>
         {
@@ -580,24 +388,24 @@ public partial class MainWindow : Window
 
     private void AppendLog(string name, string message)
     {
-        DiagnosticsList.Items.Add($"[{DateTime.Now:HH:mm:ss.fff}] {name} {message}");
-        if (DiagnosticsList.Items.Count > 600)
-        {
-            DiagnosticsList.Items.RemoveAt(0);
-        }
+        _viewModel.AppendDiagnostic(name, message);
 
-        DiagnosticsList.ScrollIntoView(DiagnosticsList.Items[^1]);
+        if (_viewModel.DiagnosticsLog.Entries.Count > 0)
+        {
+            DiagnosticsList.ScrollIntoView(_viewModel.DiagnosticsLog.Entries[^1]);
+        }
     }
 
     private void SetBusy(bool isBusy)
     {
-        StartButton.IsEnabled = !isBusy && !_isRunning;
-        StopButton.IsEnabled = !isBusy && _isRunning;
+        _viewModel.IsBusy = isBusy;
+        StartButton.IsEnabled = !isBusy && !_runtimeController.IsRunning;
+        StopButton.IsEnabled = !isBusy && _runtimeController.IsRunning;
     }
 
     private void SetRunningState(bool running)
     {
-        StatusText.Text = running ? "Running" : "Stopped";
+        _viewModel.IsRunning = running;
         StartButton.IsEnabled = !running;
         StopButton.IsEnabled = running;
         DryRunCheck.IsEnabled = !running;
@@ -611,172 +419,52 @@ public partial class MainWindow : Window
             return;
         }
 
-        var dryRun = DryRunCheck.IsChecked == true;
-        LiveWarningText.Visibility = dryRun ? Visibility.Collapsed : Visibility.Visible;
-        AllowForegroundCheck.IsEnabled = !_isRunning && dryRun;
+        LiveWarningText.Visibility = _viewModel.IsDryRun ? Visibility.Collapsed : Visibility.Visible;
+        AllowForegroundCheck.IsEnabled = !_runtimeController.IsRunning && _viewModel.IsDryRun;
     }
 
     private void UpdateStats()
     {
-        MappingCountText.Text = _host?.RuntimeConfig.Mappings.Count.ToString() ?? _mappingRows.Count.ToString();
-        TargetText.Text = _host?.RuntimeConfig.TargetProcess ?? _currentConfig.TargetProcess;
-        InputEventCountText.Text = _dryRunBackend?.Events.Count.ToString() ?? "0";
-
-        if (HostStartedText is null)
-        {
-            return;
-        }
-
-        if (_host is null)
-        {
-            HostStartedText.Text = "stopped";
-            RuntimeStateText.Text = "Stopped";
-            PipelineStateText.Text = "stopped";
-            ForegroundStateText.Text = "unknown";
-            GenerationText.Text = "0";
-            WorkerCountText.Text = "0";
-            PendingActionCountText.Text = "0";
-            RunningActionCountText.Text = "0";
-            HeldKeyCountText.Text = "0";
-            OwnerCountText.Text = "0";
-            SnapshotDetailsBox.Text =
-                $"not running{Environment.NewLine}" +
-                $"editor_mappings={_mappingRows.Count}{Environment.NewLine}" +
-                $"target={TargetProcessBox.Text.Trim()}";
-            return;
-        }
-
-        var snapshot = _host.Snapshot();
-        var runtime = snapshot.Runtime;
-        var presses = runtime.Presses;
-        HostStartedText.Text = snapshot.IsStarted ? "started" : "stopped";
-        RuntimeStateText.Text = runtime.State.ToString();
-        PipelineStateText.Text = snapshot.IsPipelineRunning ? "running" : "stopped";
-        ForegroundStateText.Text = runtime.LastForegroundAllowed ? "last allowed" : "last blocked";
-        GenerationText.Text = runtime.Generation.ToString();
-        WorkerCountText.Text = runtime.ActiveWorkerCount.ToString();
-        PendingActionCountText.Text = runtime.PendingActionCount.ToString();
-        RunningActionCountText.Text = runtime.RunningActionCount.ToString();
-        HeldKeyCountText.Text = presses.KeyOwners.Count.ToString();
-        OwnerCountText.Text = presses.OwnerKeys.Count.ToString();
-        SnapshotDetailsBox.Text = FormatSnapshotDetails(snapshot);
+        var snapshot = _runtimeController.Snapshot();
+        _viewModel.ApplySnapshot(snapshot, _runtimeController.InputEventCount);
     }
 
-    private static string FormatSnapshotDetails(RuntimeHostSnapshot snapshot)
+    private void ArmKeyCaptureAfterCurrentInput()
     {
-        var runtime = snapshot.Runtime;
-        var presses = runtime.Presses;
-        var heldKeys = presses.KeyOwners.Count == 0
-            ? "held_keys=none"
-            : "held_keys=" + string.Join("; ", presses.KeyOwners.Select(pair =>
-                $"{pair.Key}<-{string.Join(",", pair.Value)}"));
-        var owners = presses.OwnerKeys.Count == 0
-            ? "owners=none"
-            : "owners=" + string.Join("; ", presses.OwnerKeys.Select(pair =>
-                $"{pair.Key}->{string.Join(",", pair.Value)}"));
-
-        return string.Join(
-            Environment.NewLine,
-            $"state={runtime.State} host_started={snapshot.IsStarted} pipeline={snapshot.IsPipelineRunning}",
-            $"target={snapshot.RuntimeConfig.TargetProcess} mappings={runtime.MappingCount} generation={runtime.Generation}",
-            $"trigger_pipeline queued={snapshot.Pipeline.QueuedCount} handled={snapshot.Pipeline.HandledCount} pending={snapshot.Pipeline.PendingCount}",
-            $"workers={runtime.ActiveWorkerCount} pending_actions={runtime.PendingActionCount} running_actions={runtime.RunningActionCount} last_foreground_allowed={runtime.LastForegroundAllowed}",
-            heldKeys,
-            owners);
-    }
-
-    private static string ComboText(ComboBox comboBox, string fallback)
-    {
-        return comboBox.SelectedItem is ComboBoxItem item && item.Content is not null
-            ? item.Content.ToString() ?? fallback
-            : fallback;
-    }
-
-    private static void SetComboText(ComboBox comboBox, string value)
-    {
-        foreach (var item in comboBox.Items.OfType<ComboBoxItem>())
+        _keyCaptureArmed = false;
+        Dispatcher.BeginInvoke(() =>
         {
-            if (string.Equals(item.Content?.ToString(), value, StringComparison.OrdinalIgnoreCase))
+            if (_viewModel.IsCapturingKey)
             {
-                comboBox.SelectedItem = item;
-                return;
+                _keyCaptureArmed = true;
+                Focus();
+                Keyboard.Focus(this);
             }
-        }
+        }, DispatcherPriority.Background);
     }
 
-    private static string FindDefaultConfigPath()
+    private bool IsFromCaptureControl(object source)
     {
-        var current = Environment.CurrentDirectory;
-        for (var i = 0; i < 6; i++)
+        if (source is not DependencyObject dependencyObject)
         {
-            var candidate = Path.Combine(current, "config.example.json");
-            if (File.Exists(candidate))
+            return false;
+        }
+
+        while (dependencyObject is not null)
+        {
+            if (ReferenceEquals(dependencyObject, MappingTriggerCaptureButton) ||
+                ReferenceEquals(dependencyObject, MappingTriggerCancelCaptureButton) ||
+                ReferenceEquals(dependencyObject, MappingTargetCaptureButton) ||
+                ReferenceEquals(dependencyObject, MappingTargetCancelCaptureButton) ||
+                ReferenceEquals(dependencyObject, HotkeyCaptureButton) ||
+                ReferenceEquals(dependencyObject, HotkeyCancelCaptureButton))
             {
-                return candidate;
+                return true;
             }
 
-            var parent = Directory.GetParent(current);
-            if (parent is null)
-            {
-                break;
-            }
-
-            current = parent.FullName;
+            dependencyObject = VisualTreeHelper.GetParent(dependencyObject);
         }
 
-        return Path.Combine(Environment.CurrentDirectory, "config.example.json");
-    }
-}
-
-public sealed class MappingEditorRow
-{
-    public string? Id { get; init; }
-    public string Trigger { get; init; } = string.Empty;
-    public string Type { get; init; } = "simple";
-    public string Target { get; init; } = string.Empty;
-    public string Mode { get; init; } = "hold";
-    public string Script { get; init; } = string.Empty;
-    public Dictionary<string, object>? ExtraFields { get; init; }
-
-    public string ScriptSummary
-    {
-        get
-        {
-            if (!string.Equals(Type, "macro", StringComparison.OrdinalIgnoreCase))
-            {
-                return "-";
-            }
-
-            var compact = Script.Replace("\r", " ").Replace("\n", " ").Trim();
-            return compact.Length <= 42 ? compact : compact[..42] + "...";
-        }
-    }
-
-    public static MappingEditorRow FromConfig(MappingConfigV1 mapping)
-    {
-        return new MappingEditorRow
-        {
-            Id = mapping.Id,
-            Trigger = mapping.Trigger,
-            Type = string.IsNullOrWhiteSpace(mapping.Type) ? "simple" : mapping.Type,
-            Target = mapping.Target ?? string.Empty,
-            Mode = mapping.Mode ?? string.Empty,
-            Script = mapping.Script ?? string.Empty,
-            ExtraFields = mapping.ExtraFields
-        };
-    }
-
-    public MappingConfigV1 ToConfig()
-    {
-        return new MappingConfigV1
-        {
-            Id = Id,
-            Trigger = Trigger,
-            Type = Type,
-            Target = string.Equals(Type, "simple", StringComparison.OrdinalIgnoreCase) ? Target : null,
-            Mode = string.Equals(Type, "simple", StringComparison.OrdinalIgnoreCase) ? Mode : null,
-            Script = string.Equals(Type, "macro", StringComparison.OrdinalIgnoreCase) ? Script : null,
-            ExtraFields = ExtraFields
-        };
+        return false;
     }
 }

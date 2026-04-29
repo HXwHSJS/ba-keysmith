@@ -21,6 +21,8 @@ internal sealed class LiveHarnessWindow : IDisposable
     private const int WmXbuttondown = 0x020B;
     private const int WmXbuttonup = 0x020C;
     private const uint WsOverlappedWindow = 0x00CF0000;
+    private const int Xbutton1 = 0x0001;
+    private const int Xbutton2 = 0x0002;
 
     private readonly ManualResetEventSlim _ready = new();
     private readonly ManualResetEventSlim _closed = new();
@@ -34,6 +36,12 @@ internal sealed class LiveHarnessWindow : IDisposable
     private long _mouseDownCount;
     private long _mouseUpCount;
     private long _wheelCount;
+    private long _wheelUpCount;
+    private long _wheelDownCount;
+    private long _xButton1DownCount;
+    private long _xButton1UpCount;
+    private long _xButton2DownCount;
+    private long _xButton2UpCount;
     private readonly long[] _keyDownByVirtualKey = new long[256];
     private readonly long[] _keyUpByVirtualKey = new long[256];
 
@@ -56,6 +64,33 @@ internal sealed class LiveHarnessWindow : IDisposable
     public long MouseDownCount => Interlocked.Read(ref _mouseDownCount);
     public long MouseUpCount => Interlocked.Read(ref _mouseUpCount);
     public long WheelCount => Interlocked.Read(ref _wheelCount);
+    public long WheelUpCount => Interlocked.Read(ref _wheelUpCount);
+    public long WheelDownCount => Interlocked.Read(ref _wheelDownCount);
+    public long XButton1DownCount => Interlocked.Read(ref _xButton1DownCount);
+    public long XButton1UpCount => Interlocked.Read(ref _xButton1UpCount);
+    public long XButton2DownCount => Interlocked.Read(ref _xButton2DownCount);
+    public long XButton2UpCount => Interlocked.Read(ref _xButton2UpCount);
+
+    public void Reset()
+    {
+        Interlocked.Exchange(ref _keyDownCount, 0);
+        Interlocked.Exchange(ref _keyUpCount, 0);
+        Interlocked.Exchange(ref _mouseDownCount, 0);
+        Interlocked.Exchange(ref _mouseUpCount, 0);
+        Interlocked.Exchange(ref _wheelCount, 0);
+        Interlocked.Exchange(ref _wheelUpCount, 0);
+        Interlocked.Exchange(ref _wheelDownCount, 0);
+        Interlocked.Exchange(ref _xButton1DownCount, 0);
+        Interlocked.Exchange(ref _xButton1UpCount, 0);
+        Interlocked.Exchange(ref _xButton2DownCount, 0);
+        Interlocked.Exchange(ref _xButton2UpCount, 0);
+
+        for (var index = 0; index < _keyDownByVirtualKey.Length; index++)
+        {
+            Interlocked.Exchange(ref _keyDownByVirtualKey[index], 0);
+            Interlocked.Exchange(ref _keyUpByVirtualKey[index], 0);
+        }
+    }
 
     public long KeyDownCountFor(int virtualKey)
     {
@@ -92,9 +127,7 @@ internal sealed class LiveHarnessWindow : IDisposable
             return false;
         }
 
-        _ = ShowWindow(_hwnd, SwRestore);
-        _ = SetForegroundWindow(_hwnd);
-        return await LiveWindowTools.WaitForForegroundAsync(_hwnd, timeout);
+        return await LiveWindowTools.FocusAsync(_hwnd, timeout);
     }
 
     public void Dispose()
@@ -189,17 +222,31 @@ internal sealed class LiveHarnessWindow : IDisposable
             case WmLbuttondown:
             case WmRbuttondown:
             case WmMbuttondown:
-            case WmXbuttondown:
                 Interlocked.Increment(ref _mouseDownCount);
                 break;
             case WmLbuttonup:
             case WmRbuttonup:
             case WmMbuttonup:
+                Interlocked.Increment(ref _mouseUpCount);
+                break;
+            case WmXbuttondown:
+                Interlocked.Increment(ref _mouseDownCount);
+                IncrementXButtonCount(wParam, down: true);
+                break;
             case WmXbuttonup:
                 Interlocked.Increment(ref _mouseUpCount);
+                IncrementXButtonCount(wParam, down: false);
                 break;
             case WmMousewheel:
                 Interlocked.Increment(ref _wheelCount);
+                if (ExtractHighWordSigned(wParam) >= 0)
+                {
+                    Interlocked.Increment(ref _wheelUpCount);
+                }
+                else
+                {
+                    Interlocked.Increment(ref _wheelDownCount);
+                }
                 break;
         }
 
@@ -213,6 +260,43 @@ internal sealed class LiveHarnessWindow : IDisposable
         {
             Interlocked.Increment(ref counters[virtualKey]);
         }
+    }
+
+    private void IncrementXButtonCount(IntPtr wParam, bool down)
+    {
+        var button = ExtractHighWordUnsigned(wParam);
+        if (button == Xbutton2)
+        {
+            if (down)
+            {
+                Interlocked.Increment(ref _xButton2DownCount);
+            }
+            else
+            {
+                Interlocked.Increment(ref _xButton2UpCount);
+            }
+
+            return;
+        }
+
+        if (down)
+        {
+            Interlocked.Increment(ref _xButton1DownCount);
+        }
+        else
+        {
+            Interlocked.Increment(ref _xButton1UpCount);
+        }
+    }
+
+    private static int ExtractHighWordUnsigned(IntPtr value)
+    {
+        return (int)((value.ToInt64() >> 16) & 0xffff);
+    }
+
+    private static short ExtractHighWordSigned(IntPtr value)
+    {
+        return unchecked((short)((value.ToInt64() >> 16) & 0xffff));
     }
 
     [DllImport("user32.dll", SetLastError = true, CharSet = CharSet.Unicode)]

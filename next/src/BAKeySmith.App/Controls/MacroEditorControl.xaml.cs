@@ -1,8 +1,10 @@
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Controls.Primitives;
 using System.Windows.Documents;
 using System.Windows.Input;
 using System.Windows.Media;
+using System.Windows.Threading;
 using BAKeySmith.Core.Scripting;
 
 namespace BAKeySmith.App.Controls;
@@ -22,13 +24,22 @@ public partial class MacroEditorControl : UserControl
     private readonly MacroScriptCompletionProvider _completionProvider = new();
     private readonly MacroScriptLanguageService _languageService = new();
     private MacroScriptCompletionResult? _lastCompletion;
+    private ScrollViewer? _scriptScrollViewer;
+    private Window? _hostWindow;
+    private MacroCompletionPopupContext? _currentCompletionContext;
+    private MacroCompletionPopupContext? _dismissedCompletionContext;
+    private bool _suppressNextCompletionOpen;
     private bool _updatingText;
 
     public MacroEditorControl()
     {
         InitializeComponent();
         ScriptBox.Text = ScriptText;
-        RefreshEditorState();
+        Loaded += MacroEditorControl_Loaded;
+        Unloaded += MacroEditorControl_Unloaded;
+        ScriptBox.LostKeyboardFocus += ScriptBox_LostKeyboardFocus;
+        ScriptBox.SizeChanged += ScriptBox_SizeChanged;
+        RefreshEditorState(openCompletionIfEligible: false);
     }
 
     public string ScriptText
@@ -52,6 +63,46 @@ public partial class MacroEditorControl : UserControl
         ScriptBox.Focus();
     }
 
+    public void GoToLine(int line)
+    {
+        if (line <= 0 || line > ScriptBox.LineCount)
+        {
+            return;
+        }
+
+        var index = ScriptBox.GetCharacterIndexFromLineIndex(line - 1);
+        if (index < 0)
+        {
+            return;
+        }
+
+        ScriptBox.Focus();
+        ScriptBox.CaretIndex = index;
+        ScriptBox.ScrollToLine(line - 1);
+        RefreshCursorAndCompletions(openIfEligible: false);
+    }
+
+    private void MacroEditorControl_Loaded(object sender, RoutedEventArgs e)
+    {
+        AttachHostWindow();
+        AttachScriptScrollViewer();
+        RefreshVisibleLineNumbers();
+        Dispatcher.BeginInvoke(RefreshVisibleLineNumbers, DispatcherPriority.Loaded);
+        RefreshCursorAndCompletions(openIfEligible: false);
+    }
+
+    private void MacroEditorControl_Unloaded(object sender, RoutedEventArgs e)
+    {
+        DetachHostWindow();
+        if (_scriptScrollViewer is not null)
+        {
+            _scriptScrollViewer.ScrollChanged -= ScriptScrollViewer_ScrollChanged;
+            _scriptScrollViewer = null;
+        }
+
+        CloseCompletionPopup();
+    }
+
     private static void OnScriptTextChanged(
         DependencyObject dependencyObject,
         DependencyPropertyChangedEventArgs eventArgs)
@@ -63,7 +114,7 @@ public partial class MacroEditorControl : UserControl
         }
 
         editor.ScriptBox.Text = eventArgs.NewValue?.ToString() ?? string.Empty;
-        editor.RefreshEditorState();
+        editor.RefreshEditorState(openCompletionIfEligible: false);
     }
 
     private void ScriptBox_TextChanged(object sender, TextChangedEventArgs e)
@@ -71,53 +122,100 @@ public partial class MacroEditorControl : UserControl
         _updatingText = true;
         ScriptText = ScriptBox.Text;
         _updatingText = false;
-        RefreshEditorState();
+        RefreshEditorState(openCompletionIfEligible: true);
     }
 
     private void ScriptBox_SelectionChanged(object sender, RoutedEventArgs e)
     {
-        RefreshCursorAndCompletions();
+        RefreshVisibleLineNumbers();
+        RefreshCursorAndCompletions(openIfEligible: CompletionPopup.IsOpen);
     }
 
     private void ScriptBox_PreviewKeyDown(object sender, KeyEventArgs e)
     {
-        if (e.Key == Key.Tab && ApplySelectedCompletion())
+        if (e.Key == Key.Escape && CompletionPopup.IsOpen)
+        {
+            _dismissedCompletionContext = _currentCompletionContext;
+            CloseCompletionPopup();
+            e.Handled = true;
+            return;
+        }
+
+        if (CompletionPopup.IsOpen &&
+            (e.Key == Key.Tab || e.Key == Key.Enter) &&
+            ApplySelectedCompletion())
+        {
+            e.Handled = true;
+            return;
+        }
+
+        if (CompletionPopup.IsOpen && e.Key is Key.Down or Key.Up)
+        {
+            MoveCompletionSelection(e.Key == Key.Down ? 1 : -1);
+            e.Handled = true;
+        }
+    }
+
+    private void CompletionList_MouseDoubleClick(object sender, MouseButtonEventArgs e)
+    {
+        _ = ApplySelectedCompletion();
+    }
+
+    private void CompletionList_PreviewKeyDown(object sender, KeyEventArgs e)
+    {
+        if (e.Key == Key.Escape)
+        {
+            _dismissedCompletionContext = _currentCompletionContext;
+            CloseCompletionPopup();
+            ScriptBox.Focus();
+            e.Handled = true;
+            return;
+        }
+
+        if ((e.Key == Key.Tab || e.Key == Key.Enter) && ApplySelectedCompletion())
         {
             e.Handled = true;
         }
     }
 
-    private void SuggestionList_MouseDoubleClick(object sender, MouseButtonEventArgs e)
+    private void ScriptBox_LostKeyboardFocus(object sender, KeyboardFocusChangedEventArgs e)
     {
-        _ = ApplySelectedCompletion();
-    }
-
-    private void DiagnosticList_MouseDoubleClick(object sender, MouseButtonEventArgs e)
-    {
-        if (DiagnosticList.SelectedItem is DiagnosticDisplayItem { Line: > 0 } item)
+        if (e.NewFocus is DependencyObject dependencyObject &&
+            IsWithin(dependencyObject, CompletionPopup.Child))
         {
-            GoToLine(item.Line);
+            return;
         }
+
+        CloseCompletionPopup();
     }
 
-    private void InsertCompletion_Click(object sender, RoutedEventArgs e)
+    private void ScriptBox_SizeChanged(object sender, SizeChangedEventArgs e)
     {
-        _ = ApplySelectedCompletion();
+        RefreshVisibleLineNumbers();
+        RepositionCompletionPopup();
     }
 
-    private void RefreshEditorState()
+    private void ScriptScrollViewer_ScrollChanged(object sender, ScrollChangedEventArgs e)
+    {
+        RefreshVisibleLineNumbers();
+        RepositionCompletionPopup();
+    }
+
+    private void HostWindow_Deactivated(object? sender, EventArgs e)
+    {
+        CloseCompletionPopup();
+    }
+
+    private void RefreshEditorState(bool openCompletionIfEligible)
     {
         RefreshLineNumbers();
         RefreshValidation();
-        RefreshCursorAndCompletions();
+        RefreshCursorAndCompletions(openCompletionIfEligible);
     }
 
     private void RefreshLineNumbers()
     {
-        var lineCount = Math.Max(1, ScriptBox.LineCount);
-        LineNumbersText.Text = string.Join(
-            Environment.NewLine,
-            Enumerable.Range(1, lineCount));
+        RefreshVisibleLineNumbers();
     }
 
     private void RefreshValidation()
@@ -128,8 +226,6 @@ public partial class MacroEditorControl : UserControl
         {
             StatusText.Text = $"macro ok · {LastCompileResult.Instructions.Count} instructions";
             StatusText.Foreground = Brush("#0f766e");
-            DiagnosticList.ItemsSource = null;
-            DiagnosticList.Visibility = Visibility.Collapsed;
             ScriptBox.BorderBrush = Brush("#dbe4ef");
             return;
         }
@@ -138,31 +234,51 @@ public partial class MacroEditorControl : UserControl
         var prefix = first is null || first.Line <= 0 ? "macro error" : $"line {first.Line}";
         StatusText.Text = $"{prefix}: {string.Join(" / ", LastCompileResult.Errors)}";
         StatusText.Foreground = Brush("#b91c1c");
-        DiagnosticList.ItemsSource = LastCompileResult.Diagnostics
-            .Select(diagnostic => new DiagnosticDisplayItem(
-                diagnostic.Line,
-                diagnostic.Line <= 0
-                    ? $"global: {diagnostic.Message}"
-                    : $"line {diagnostic.Line}: {diagnostic.Message}"))
-            .ToArray();
-        DiagnosticList.Visibility = Visibility.Visible;
         ScriptBox.BorderBrush = Brush("#b91c1c");
     }
 
-    private void RefreshCursorAndCompletions()
+    private void RefreshCursorAndCompletions(bool openIfEligible)
     {
-        var line = ScriptBox.GetLineIndexFromCharacterIndex(ScriptBox.CaretIndex) + 1;
-        var lineStart = ScriptBox.GetCharacterIndexFromLineIndex(Math.Max(0, line - 1));
+        var lineCount = ScriptBox.LineCount;
+        var line = lineCount <= 0
+            ? 1
+            : ScriptBox.GetLineIndexFromCharacterIndex(ScriptBox.CaretIndex) + 1;
+        var lineStart = lineCount <= 0
+            ? 0
+            : ScriptBox.GetCharacterIndexFromLineIndex(Math.Max(0, line - 1));
+        if (lineStart < 0)
+        {
+            lineStart = 0;
+        }
+
         var column = ScriptBox.CaretIndex - lineStart + 1;
         CursorText.Text = $"Ln {line}, Col {column}";
 
         _lastCompletion = _completionProvider.Complete(
             ScriptBox.Text,
             ScriptBox.CaretIndex);
-        SuggestionList.ItemsSource = _lastCompletion.Items;
+        CompletionList.ItemsSource = _lastCompletion.Items;
         if (_lastCompletion.Items.Count > 0)
         {
-            SuggestionList.SelectedIndex = 0;
+            CompletionList.SelectedIndex = 0;
+        }
+
+        var suppressOpen = _suppressNextCompletionOpen || !openIfEligible;
+        var decision = MacroCompletionPopupPolicy.Evaluate(
+            ScriptBox.Text,
+            ScriptBox.CaretIndex,
+            _lastCompletion,
+            _dismissedCompletionContext,
+            suppressOpen);
+        _suppressNextCompletionOpen = false;
+        _currentCompletionContext = decision.Context;
+        if (decision.ShouldOpen)
+        {
+            OpenOrRepositionCompletionPopup();
+        }
+        else
+        {
+            CloseCompletionPopup();
         }
 
         RefreshTokenPreview(line);
@@ -175,15 +291,18 @@ public partial class MacroEditorControl : UserControl
             return false;
         }
 
-        var selected = SuggestionList.SelectedItem as MacroScriptCompletionItem
+        var selected = CompletionList.SelectedItem as MacroScriptCompletionItem
             ?? _lastCompletion.Items[0];
         var text = ScriptBox.Text;
         var start = Math.Clamp(_lastCompletion.ReplacementStart, 0, text.Length);
         var length = Math.Min(_lastCompletion.ReplacementLength, text.Length - start);
+        _suppressNextCompletionOpen = true;
+        _dismissedCompletionContext = null;
         ScriptBox.Text = text.Remove(start, length).Insert(start, selected.Text);
         ScriptBox.CaretIndex = start + selected.Text.Length;
         ScriptBox.Focus();
-        RefreshEditorState();
+        CloseCompletionPopup();
+        RefreshEditorState(openCompletionIfEligible: false);
         return true;
     }
 
@@ -222,22 +341,227 @@ public partial class MacroEditorControl : UserControl
         }
     }
 
-    private void GoToLine(int line)
+    private void AttachScriptScrollViewer()
     {
-        if (line <= 0 || line > ScriptBox.LineCount)
+        if (_scriptScrollViewer is not null)
         {
             return;
         }
 
-        var index = ScriptBox.GetCharacterIndexFromLineIndex(line - 1);
-        if (index < 0)
+        ScriptBox.ApplyTemplate();
+        _scriptScrollViewer = ScriptBox.Template.FindName("PART_ContentHost", ScriptBox) as ScrollViewer
+            ?? FindVisualChild<ScrollViewer>(ScriptBox);
+        if (_scriptScrollViewer is null)
         {
             return;
         }
 
-        ScriptBox.Focus();
-        ScriptBox.CaretIndex = index;
-        ScriptBox.ScrollToLine(line - 1);
+        _scriptScrollViewer.ScrollChanged += ScriptScrollViewer_ScrollChanged;
+    }
+
+    private void AttachHostWindow()
+    {
+        var window = Window.GetWindow(this);
+        if (ReferenceEquals(_hostWindow, window))
+        {
+            return;
+        }
+
+        DetachHostWindow();
+        _hostWindow = window;
+        if (_hostWindow is not null)
+        {
+            _hostWindow.Deactivated += HostWindow_Deactivated;
+        }
+    }
+
+    private void DetachHostWindow()
+    {
+        if (_hostWindow is null)
+        {
+            return;
+        }
+
+        _hostWindow.Deactivated -= HostWindow_Deactivated;
+        _hostWindow = null;
+    }
+
+    private void RepositionCompletionPopup()
+    {
+        if (CompletionPopup.IsOpen)
+        {
+            OpenOrRepositionCompletionPopup();
+        }
+    }
+
+    private void OpenOrRepositionCompletionPopup()
+    {
+        if (_lastCompletion is null ||
+            _lastCompletion.Items.Count == 0 ||
+            !ScriptBox.IsKeyboardFocusWithin)
+        {
+            CloseCompletionPopup();
+            return;
+        }
+
+        var caretRect = ScriptBox.GetRectFromCharacterIndex(
+            Math.Clamp(ScriptBox.CaretIndex, 0, ScriptBox.Text.Length),
+            trailingEdge: true);
+        if (caretRect.IsEmpty)
+        {
+            CloseCompletionPopup();
+            return;
+        }
+
+        CompletionPopup.HorizontalOffset = Math.Max(0, caretRect.X);
+        CompletionPopup.VerticalOffset = Math.Min(
+            ScriptBox.ActualHeight,
+            Math.Max(0, caretRect.Bottom + 4));
+        CompletionPopupBorder.MaxWidth = Math.Max(220, Math.Min(360, ScriptBox.ActualWidth - 12));
+        CompletionPopup.IsOpen = true;
+    }
+
+    private void CloseCompletionPopup()
+    {
+        CompletionPopup.IsOpen = false;
+    }
+
+    private void MoveCompletionSelection(int delta)
+    {
+        if (CompletionList.Items.Count == 0)
+        {
+            return;
+        }
+
+        var current = CompletionList.SelectedIndex < 0 ? 0 : CompletionList.SelectedIndex;
+        var next = Math.Clamp(current + delta, 0, CompletionList.Items.Count - 1);
+        CompletionList.SelectedIndex = next;
+        CompletionList.ScrollIntoView(CompletionList.SelectedItem);
+    }
+
+    private static T? FindVisualChild<T>(DependencyObject parent)
+        where T : DependencyObject
+    {
+        for (var i = 0; i < VisualTreeHelper.GetChildrenCount(parent); i++)
+        {
+            var child = VisualTreeHelper.GetChild(parent, i);
+            if (child is T match)
+            {
+                return match;
+            }
+
+            var descendant = FindVisualChild<T>(child);
+            if (descendant is not null)
+            {
+                return descendant;
+            }
+        }
+
+        return null;
+    }
+
+    private static bool IsWithin(DependencyObject child, object? possibleParent)
+    {
+        if (possibleParent is not DependencyObject parent)
+        {
+            return false;
+        }
+
+        var current = child;
+        while (current is not null)
+        {
+            if (ReferenceEquals(current, parent))
+            {
+                return true;
+            }
+
+            current = VisualTreeHelper.GetParent(current);
+        }
+
+        return false;
+    }
+
+    private void RefreshVisibleLineNumbers()
+    {
+        if (LineNumberCanvas is null || ScriptBox is null)
+        {
+            return;
+        }
+
+        LineNumberCanvas.Children.Clear();
+        var viewport = GetTextContentViewport();
+        LineNumberViewport.Margin = new Thickness(0, viewport.Top, 0, 0);
+        LineNumberViewport.Height = Math.Max(0, viewport.Height);
+        LineNumberCanvas.Width = Math.Max(0, LineNumberViewport.ActualWidth);
+        LineNumberCanvas.Height = Math.Max(0, viewport.Height);
+
+        var lineCount = ScriptBox.LineCount;
+        if (lineCount <= 0)
+        {
+            return;
+        }
+
+        var viewportTop = viewport.Top;
+        var viewportBottom = viewport.Bottom;
+        for (var lineIndex = 0; lineIndex < lineCount; lineIndex++)
+        {
+            var characterIndex = ScriptBox.GetCharacterIndexFromLineIndex(lineIndex);
+            if (characterIndex < 0)
+            {
+                continue;
+            }
+
+            var rect = ScriptBox.GetRectFromCharacterIndex(characterIndex);
+            if (rect.IsEmpty || rect.Bottom < viewportTop || rect.Top > viewportBottom)
+            {
+                continue;
+            }
+
+            var lineHeight = double.IsNaN(rect.Height) || rect.Height <= 0 ? ScriptBox.FontSize * 1.4 : rect.Height;
+            var lineNumber = new TextBlock
+            {
+                Text = (lineIndex + 1).ToString(),
+                Width = Math.Max(0, LineNumberViewport.ActualWidth - 10),
+                Height = lineHeight,
+                LineHeight = lineHeight,
+                LineStackingStrategy = LineStackingStrategy.BlockLineHeight,
+                Foreground = Brush("#64748b"),
+                FontFamily = ScriptBox.FontFamily,
+                FontSize = ScriptBox.FontSize,
+                TextAlignment = TextAlignment.Right
+            };
+            Canvas.SetLeft(lineNumber, 0);
+            Canvas.SetTop(lineNumber, rect.Top - viewport.Top);
+            LineNumberCanvas.Children.Add(lineNumber);
+        }
+    }
+
+    private Rect GetTextContentViewport()
+    {
+        if (_scriptScrollViewer is null)
+        {
+            AttachScriptScrollViewer();
+        }
+
+        if (_scriptScrollViewer is null ||
+            !ScriptBox.IsLoaded ||
+            _scriptScrollViewer.ActualHeight <= 0)
+        {
+            return new Rect(0, 0, Math.Max(0, ScriptBox.ActualWidth), Math.Max(0, ScriptBox.ActualHeight));
+        }
+
+        var origin = _scriptScrollViewer.TransformToAncestor(ScriptBox).Transform(new Point(0, 0));
+        var height = _scriptScrollViewer.ViewportHeight;
+        if (double.IsNaN(height) || double.IsInfinity(height) || height <= 0)
+        {
+            height = _scriptScrollViewer.ActualHeight;
+        }
+
+        return new Rect(
+            origin.X,
+            origin.Y,
+            Math.Max(0, _scriptScrollViewer.ViewportWidth),
+            Math.Max(0, height));
     }
 
     private static string GetLineText(string text, int line)
@@ -268,6 +592,4 @@ public partial class MacroEditorControl : UserControl
     {
         return (SolidColorBrush)new BrushConverter().ConvertFromString(hex)!;
     }
-
-    private sealed record DiagnosticDisplayItem(int Line, string Display);
 }

@@ -2,15 +2,18 @@
 
 先证明 C# baseline 在真实 Windows live/runtime 条件下足够硬，再决定是否值得让 Rust core 接管。
 
-## Scope Freeze
+## Scope Freeze / GUI Entry Decision
 
 路线不改，节奏纠偏。
 
 - C# 继续作为产品级基线。
 - Rust 继续作为未来可替换 runtime core 的终局储备。
-- 新的 GUI、宏编辑器、补全、高亮、IDE 化体验暂时冻结。
-- 只允许补充服务于 runtime 判断的界面或 host 观测能力，例如 live 状态、foreground gate、worker、queue、held input、diagnostic event。
-- 第一阶段结论必须优先来自 live/runtime/soak/acceptance，而不是来自 GUI 完成度。
+- Phase 1 / Phase 2 runtime 结论必须优先来自 live/runtime/soak/acceptance，而不是来自 GUI 完成度。
+- 当前 Core RC0 readiness audit 已接受：`next/` C# runtime baseline 可以认为是 Core RC0 candidate，但不是 release-ready RC。
+- GUI shell planning / productization prep 已完成；`BAKeySmith.App` 当前可以认为是 GUI RC0 candidate。
+- GUI RC0 candidate 不等于 release-ready GUI，也不等于 release-ready RC。
+- 后续 GUI 工作仍需要单独授权，且不得新增 runtime 行为、不得引入 AppConfigV2、不得新增 Macro DSL 指令。
+- GUI RC0 manual smoke checklist 见 `gui-manual-smoke-checklist.md`。
 
 ## Priority Order
 
@@ -32,16 +35,33 @@
 - 5 分钟与 10 分钟 dry-run/live soak 已通过。
 - live-safe 已覆盖 allowed foreground、blocked foreground、reload、disable、长宏 stop 清理。
 - gated suppress 已覆盖 keyboard、mouse、captured session、self-injected pass-through。
+- 真实 Blue Archive 最小人工验证已通过，Phase 1 已 exited。
+- Phase 2A current scope 已收口，`bluearchive-manual-phase2a` full-sequence latest run 已通过。
+- Phase 2B current scope 已收口：wheel / XButton 的 real-target stable samples 已固化，不重开 Phase 1 / Phase 2A 稳定基线。
+- Phase 2C 当前最小 scope 已收口：`xbutton1` 的 hold + foreground change / blocked hold + foreground return 已具备 acceptance、harness 与 real-target stable samples。
+- Phase 2C-B `xbutton2` symmetry scope 已收口：`xbutton2` 的 hold + foreground change / blocked hold + foreground return 也已具备 acceptance、harness 与 real-target stable samples。
+- Phase 2D 当前最小 scope 已收口：`xbutton2` 的 `drag-minimal` / `multisegment-move-minimal` 已具备 acceptance、harness 与 real-target stable samples。
+- Phase 2D-B 当前 scope 已收口：`xbutton2` 的 `stop-during-active-drag` / `disable-during-active-drag` 已具备 acceptance / harness coverage；对应 real-target latest JSON 当前未归档为可复用 stable samples。
+- Phase 2D-C 当前 scope 已收口：`xbutton2` 的 `reload-during-active-drag` 已具备 acceptance、harness 与 real-target stable samples，并已证明 old generation cleanup 与 new generation handoff。
+- Phase 2D-D 当前 scope 已收口：`xbutton2` 的 `foreground-loss-during-active-drag` / `foreground-loss-then-return-before-release` 已具备 acceptance、harness 与 real-target stable samples，并已证明 runtime foreground-loss cancellation、mapped owner cleanup 与 physical captured-session continuity。该结论来自显式脚本结构 `press mouse_middle` -> `setpos_rel` / move -> `wait` -> `release mouse_middle`，不等于证明内建 `drag` / `drag_rel` helper 已经 foreground-aware。
+- Phase 2D-E 当前 scope 已收口：显式 active pointer wait 已具备 foreground-aware / interruptible wait dry harness coverage；已证明 foreground loss 发生在 wait 期间时 cleanup 不必等完整 wait 结束，且 keyboard-only wait 与 runtime/session cancellation 语义不被混淆。本轮未新增 real-target latest JSON，dry harness latency bound 不是 Blue Archive real-target SLO。
+- Phase 2D-F 当前 scope 已收口：内建 `drag` / `drag_rel` helper 已具备 foreground-loss dry harness coverage；已证明 mapped drag button down 后发生 foreground loss 时会停止后续 non-cleanup output、通过 helper drag owner cleanup held button、避免 duplicate up，并且不混淆 runtime/session cancellation。本轮未新增 real-target latest JSON，dry harness latency bound 不是 Blue Archive real-target SLO，也不等于 complete drag / multi-segment drag full product scenario。
+- Phase 2E 第一批当前 scope 已收口：`mouse_x2` 触发 mapped `mouse_middle` 的 explicit complete drag / multisegment drag normal-completion 已具备 dry harness coverage；已证明 down/up 各一次、duplicate up 为 0、expected / actual move delta 匹配、completion 后无额外 output、held owner 清零、stop clean。本轮未新增 real-target latest JSON，也不重证 stop / disable / reload / foreground-loss during complete drag。
+- GUI RC0 audit 已收口：`BAKeySmith.App` 当前可认为是 GUI RC0 candidate；App tests 已覆盖 config、mapping、unknown fields、macro diagnostics、runtime dry wiring、live confirmation gate 等 GUI-side contract；当前仍不是 release-ready GUI / release-ready RC。
 
 下一步：
 
-- 真实 Blue Archive 目标环境人工验证已完成并通过，不切 GUI/编辑器。
-- 若后续 lifecycle stress 或真实目标验证暴露问题，优先修 runtime / harness / acceptance 口径。
-- Phase 1 exit 前不切 Rust、不做 Rust FFI / 跨语言集成。
+- 当前先停在 GUI RC0 candidate 文档化后的稳定工程检查点。
+- 推荐下一条单一子线是 GUI RC0 gate dry run。
+- GUI RC0 gate dry run 应包含 build、Core smoke、App tests、App smoke、`all`、`lifecycle-stress` 与 GUI manual smoke checklist。
+- 不切 Rust、不做 Rust FFI / 跨语言集成。
+- 后续如要继续 runtime，应单独定义 complete drag interruption / reload / foreground-loss product scenario 或 `mouse_left/right` physical trigger 边界，而不是混入 GUI planning。
 
 ## Acceptance Commands
 
 短 P0 矩阵，不包含 soak，适合每次改 runtime 后快速跑：
+
+当前 `all` 已包含 Phase 2D-E 的 `active-pointer-wait-foreground-loss-interrupts`、Phase 2D-F 的 `built-in-drag-foreground-loss-contract`，以及 Phase 2E 第一批的 `xbutton2-triggered-complete-drag-normal-completion` / `xbutton2-triggered-multisegment-drag-normal-completion` dry harness 场景。
 
 ```powershell
 dotnet run --project .\tools\BAKeySmith.Acceptance\BAKeySmith.Acceptance.csproj -- --scenario all --burst 50 --drain-timeout 5
@@ -64,6 +84,9 @@ dotnet run --project .\tools\BAKeySmith.Acceptance\BAKeySmith.Acceptance.csproj 
 ```powershell
 dotnet run --project .\tools\BAKeySmith.Acceptance\BAKeySmith.Acceptance.csproj -- --scenario dry-run-soak --soak-seconds 300 --soak-rate 20 --drain-timeout 10 --output .\reports\acceptance-dry-run-soak.json
 ```
+
+`.\reports\*.json` here denotes local generated report output. Stable archived
+samples remain in `next/docs/examples/`.
 
 ## Live Verification Plan
 
@@ -165,7 +188,7 @@ Required P0 scenarios before longer soak:
 
 Current result:
 
-- `trigger-suppress` 聚合场景当前 6/6 通过。
+- `trigger-suppress` 聚合场景当前 7/7 通过。
 - `mouse-trigger-suppressed`：目标前台命中时 original mouse down/up delta 为 0，映射输出正常。
 - `mouse-trigger-foreground-blocked`：foreground blocked 时映射输出为 0，original mouse down/up 进入 blocker。
 - `mouse-trigger-reload-disable-stop-clean`：reload 后旧 trigger 透传，新 trigger 输出；disable 后透传且不输出。
@@ -230,13 +253,15 @@ Phase 1 不能只看 dry-run 通过。正式 exit 必须满足：
 - Python / C# 主次关系明确。
 - 风险 backlog 已记录且不分散主线。
 
-当前状态见 `phase-1-exit.md`：自动化与 live-safe 基线已通过，但真实 Blue Archive 目标环境人工验证尚未完成，因此 Phase 1 尚未 exit。
+当前状态见 `phase-1-exit.md`：Phase 1 已 exited。当前工作重点不是重开 Phase 1，而是把 Phase 2A current scope 的 real-target manual baseline 与 release gate 固定成稳定检查点。
 
 ## Risk Backlog
 
 这些风险进入 backlog，但不改变当前收口主线：
 
 - live-safe 不是充分条件，仍需真实目标环境人工验证。
-- 鼠标边界条件要继续补 acceptance：左右键同时按下、XButton、wheel、双击、drag 中切 foreground、capture 后 reload/disable/stop、多鼠标 trigger 并存。
+- 鼠标边界条件要继续补 acceptance：左右键同时按下、双击、完整 drag / 多段 drag、`mouse_left/right` 物理 trigger、capture 后 reload/disable/stop、多鼠标 trigger 并存。
+- `drag` / `drag_rel` helper foreground-loss contract 已由 Phase 2D-F dry harness 覆盖；`mouse_x2` 触发 mapped `mouse_middle` 的 explicit complete drag / multisegment drag normal-completion 已由 Phase 2E 第一批 dry harness 覆盖。剩余缺口是 stop / disable / reload / foreground-loss during complete drag 的产品场景重证、`mouse_left/right` physical trigger、pre-helper-down foreground drift，以及真实目标 latency / soak SLO。
 - soak 之外必须保留 lifecycle stress。
+- `TriggerPipeline.StartAsync` 当前在失败后已经能正确回滚到稳态，但 start 提交期间仍存在短暂 `running` 窗口；该点已记入 backlog，后续如需更强事务性再单独收紧，这轮不继续重构。
 - Python 侧与 `next/` C# baseline 的主次关系必须按 `migration-statement.md` 收口，避免双主线。

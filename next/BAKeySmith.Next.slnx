@@ -4,6 +4,7 @@
     <Project Path="src/BAKeySmith.Core/BAKeySmith.Core.csproj" />
   </Folder>
   <Folder Name="/tests/">
+    <Project Path="tests/BAKeySmith.App.Tests/BAKeySmith.App.Tests.csproj" />
     <Project Path="tests/BAKeySmith.Core.SmokeTests/BAKeySmith.Core.SmokeTests.csproj" />
   </Folder>
   <Folder Name="/tools/">

@@ -54,6 +54,9 @@ public sealed class TriggerPipeline : IAsyncDisposable
 
     public async ValueTask StartAsync(CancellationToken cancellationToken)
     {
+        CancellationTokenSource? stop = null;
+        Channel<TriggerEvent>? channel = null;
+        Task? worker = null;
         lock (_gate)
         {
             if (_running)
@@ -61,15 +64,26 @@ public sealed class TriggerPipeline : IAsyncDisposable
                 return;
             }
 
-            _stop = new CancellationTokenSource();
-            _channel = CreateChannel();
+            stop = new CancellationTokenSource();
+            channel = CreateChannel();
             _source.Triggered += OnTriggered;
-            _worker = Task.Run(() => PumpAsync(_channel, _stop.Token), CancellationToken.None);
+            worker = Task.Run(() => PumpAsync(channel, stop.Token), CancellationToken.None);
+            _stop = stop;
+            _channel = channel;
+            _worker = worker;
             _running = true;
         }
 
-        await _source.StartAsync(cancellationToken);
-        _diagnostics.Emit(DiagnosticEvent.Create("trigger_pipeline", "started"));
+        try
+        {
+            await _source.StartAsync(cancellationToken);
+            _diagnostics.Emit(DiagnosticEvent.Create("trigger_pipeline", "started"));
+        }
+        catch
+        {
+            await RollbackStartAsync(stop, channel, worker);
+            throw;
+        }
     }
 
     public async ValueTask StopAsync(CancellationToken cancellationToken)
@@ -183,5 +197,39 @@ public sealed class TriggerPipeline : IAsyncDisposable
             {
                 ["dropped"] = pending.ToString()
             }));
+    }
+
+    private async ValueTask RollbackStartAsync(
+        CancellationTokenSource? stop,
+        Channel<TriggerEvent>? channel,
+        Task? worker)
+    {
+        lock (_gate)
+        {
+            _running = false;
+            _source.Triggered -= OnTriggered;
+            _stop = null;
+            _channel = null;
+            _worker = null;
+        }
+
+        try
+        {
+            await _source.StopAsync(CancellationToken.None);
+        }
+        catch
+        {
+            // Best-effort rollback: the original start failure remains the primary error.
+        }
+
+        channel?.Writer.TryComplete();
+        stop?.Cancel();
+        if (worker is not null)
+        {
+            await Task.WhenAny(worker, Task.Delay(TimeSpan.FromMilliseconds(500), CancellationToken.None));
+        }
+
+        MarkPendingDropped();
+        stop?.Dispose();
     }
 }

@@ -1,0 +1,32 @@
+{
+  "Tool": "BAKeySmith.Acceptance",
+  "Runtime": ".NET",
+  "GeneratedAtUtc": "2026-04-20T12:18:01.5454988+00:00",
+  "Scenario": "xbutton-self-injected-pass-through",
+  "BurstCount": 50,
+  "DrainTimeoutMs": 5000,
+  "SoakSeconds": 300,
+  "SoakRateHz": 20,
+  "Passed": true,
+  "DurationMs": 341.9093,
+  "Scenarios": [
+    {
+      "Name": "xbutton-self-injected-pass-through",
+      "Passed": true,
+      "DurationMs": 321.7451,
+      "Error": null,
+      "Metrics": {
+        "self_injected_pipeline_delta": 0,
+        "mapped_output_events": 0,
+        "self_injected_xbutton1_hook_trigger_count": 0,
+        "self_injected_xbutton2_hook_trigger_count": 0,
+        "target_xbutton1_down_delta": 1,
+        "target_xbutton1_up_delta": 1,
+        "target_xbutton2_down_delta": 1,
+        "target_xbutton2_up_delta": 1,
+        "diagnostic_events": 7,
+        "stopped_clean": true
+      }
+    }
+  ]
+}

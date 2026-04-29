@@ -1,23 +1,23 @@
 {
   "Tool": "BAKeySmith.Acceptance",
   "Runtime": ".NET",
-  "GeneratedAtUtc": "2026-04-20T01:51:17.7028848+00:00",
+  "GeneratedAtUtc": "2026-04-26T16:43:40.4651688+00:00",
   "Scenario": "bluearchive-manual",
   "BurstCount": 50,
   "DrainTimeoutMs": 5000,
   "SoakSeconds": 300,
   "SoakRateHz": 20,
   "Passed": true,
-  "DurationMs": 10733.6636,
+  "DurationMs": 2955.5082,
   "Scenarios": [
     {
       "Name": "bluearchive-manual",
       "Passed": true,
-      "DurationMs": 10709.3762,
+      "DurationMs": 2935.1131,
       "Error": null,
       "Metrics": {
-        "target_process": "BlueArchive",
-        "target_process_id": 7820,
+        "target_process": "BlueArchive.exe",
+        "target_process_id": 17312,
         "target_window_title": "\u30D6\u30EB\u30FC\u30A2\u30FC\u30AB\u30A4\u30D6",
         "manual_trigger": "f8",
         "manual_trigger_mode": "physical_keyboard_only",
@@ -35,9 +35,58 @@
         "foreground_blocked_output_delta": 0,
         "foreground_blocked_keyboard_pass_through": 1,
         "manual_suppress_confirmed": true,
-        "stop_ms": 7.7136,
+        "stop_ms": 8.3356,
         "diagnostic_events": 21,
-        "stopped_clean": true
+        "stopped_clean": true,
+        "snapshot_stopped": {
+          "IsStarted": false,
+          "IsPipelineRunning": false,
+          "Pipeline": {
+            "IsRunning": false,
+            "QueuedCount": 2,
+            "HandledCount": 2,
+            "DroppedCount": 0,
+            "PendingCount": 0
+          },
+          "RuntimeConfig": {
+            "TargetProcess": "BlueArchive.exe",
+            "TapHoldMilliseconds": 5,
+            "Mappings": [
+              {
+                "Id": "mapping:keyboard:f8",
+                "Trigger": {
+                  "Device": "keyboard",
+                  "Code": "f8",
+                  "NormalizedDevice": "keyboard",
+                  "NormalizedCode": "f8",
+                  "Key": "keyboard:f8"
+                },
+                "Action": {
+                  "Kind": "tap",
+                  "Key": "escape",
+                  "Macro": null,
+                  "NormalizedKind": "tap"
+                },
+                "NormalizedId": "mapping:keyboard:f8"
+              }
+            ],
+            "TapHold": "00:00:00.0050000"
+          },
+          "Runtime": {
+            "State": "Stopped",
+            "Generation": 1,
+            "MappingCount": 1,
+            "ActiveWorkerCount": 0,
+            "PendingActionCount": 0,
+            "RunningActionCount": 0,
+            "LastForegroundAllowed": true,
+            "Presses": {
+              "KeyOwners": {},
+              "OwnerKeys": {},
+              "IsEmpty": true
+            }
+          }
+        }
       }
     }
   ]

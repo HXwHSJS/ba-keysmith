@@ -48,7 +48,26 @@ public sealed class PressOwnershipTracker
 
         if (shouldSendDown)
         {
-            await SendDownAsync(key, cancellationToken);
+            try
+            {
+                await SendDownAsync(key, cancellationToken);
+            }
+            catch (Exception ex)
+            {
+                RollBackHold(owner, key);
+                _diagnostics.Emit(DiagnosticEvent.Create(
+                    "presses",
+                    "key_down_failed",
+                    DiagnosticLevel.Error,
+                    ex.Message,
+                    new Dictionary<string, string>
+                    {
+                        ["key"] = key,
+                        ["owner"] = owner
+                    }));
+                throw;
+            }
+
             _diagnostics.Emit(DiagnosticEvent.Create(
                 "presses",
                 "key_down",
@@ -121,6 +140,30 @@ public sealed class PressOwnershipTracker
         foreach (var key in keys)
         {
             await ReleaseKeyAsync(owner, key, cancellationToken);
+        }
+    }
+
+    private void RollBackHold(string owner, string key)
+    {
+        lock (_gate)
+        {
+            if (_keyOwners.TryGetValue(key, out var owners))
+            {
+                owners.Remove(owner);
+                if (owners.Count == 0)
+                {
+                    _keyOwners.Remove(key);
+                }
+            }
+
+            if (_ownerKeys.TryGetValue(owner, out var keys))
+            {
+                keys.Remove(key);
+                if (keys.Count == 0)
+                {
+                    _ownerKeys.Remove(owner);
+                }
+            }
         }
     }
 

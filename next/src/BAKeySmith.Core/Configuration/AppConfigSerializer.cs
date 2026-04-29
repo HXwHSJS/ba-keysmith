@@ -65,6 +65,7 @@ public static class AppConfigSerializer
         var compiler = new MacroScriptCompiler();
         var mappings = new List<MappingDefinition>();
         var seenTriggers = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var controlHotkey = NormalizeControlHotkey(config.Hotkey, errors);
 
         foreach (var mapping in config.Mappings)
         {
@@ -75,6 +76,12 @@ public static class AppConfigSerializer
             }
 
             var trigger = ToTriggerSpec(mapping.Trigger);
+            if (controlHotkey.TryGetConflict(trigger, out var conflictKey))
+            {
+                errors.Add($"{conflictKey} 与控制热键 {controlHotkey.Display} 冲突。");
+                continue;
+            }
+
             if (!seenTriggers.Add(trigger.Key))
             {
                 errors.Add($"触发键重复: {mapping.Trigger}");
@@ -156,5 +163,59 @@ public static class AppConfigSerializer
         }
 
         return KeyNameResolver.ResolveKeyboardKey(normalized).Name;
+    }
+
+    private static ControlHotkey NormalizeControlHotkey(string? hotkey, List<string> errors)
+    {
+        if (string.IsNullOrWhiteSpace(hotkey))
+        {
+            return ControlHotkey.Empty;
+        }
+
+        var components = new List<ControlHotkeyComponent>();
+        foreach (var rawPart in hotkey.Split('+', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+        {
+            if (string.IsNullOrWhiteSpace(rawPart))
+            {
+                continue;
+            }
+
+            if (!KeyNameResolver.TryResolveKeyboardKey(rawPart, out var keyInfo))
+            {
+                errors.Add($"控制热键包含不支持的键: {rawPart}");
+                continue;
+            }
+
+            components.Add(new ControlHotkeyComponent(
+                TriggerSpec.Keyboard(keyInfo.Name).Key,
+                keyInfo.Name));
+        }
+
+        return components.Count == 0
+            ? ControlHotkey.Empty
+            : new ControlHotkey(components);
+    }
+
+    private sealed record ControlHotkeyComponent(string TriggerKey, string Name);
+
+    private sealed class ControlHotkey(IReadOnlyList<ControlHotkeyComponent> components)
+    {
+        public static ControlHotkey Empty { get; } = new([]);
+
+        public string Display { get; } = string.Join("+", components.Select(component => component.Name));
+
+        public bool TryGetConflict(TriggerSpec trigger, out string conflictKey)
+        {
+            var component = components.FirstOrDefault(component =>
+                string.Equals(component.TriggerKey, trigger.Key, StringComparison.OrdinalIgnoreCase));
+            if (component is null)
+            {
+                conflictKey = string.Empty;
+                return false;
+            }
+
+            conflictKey = component.Name;
+            return true;
+        }
     }
 }

@@ -8,8 +8,7 @@ replacement for the Python beta.
 
 - Review branch: `review/next-v2-design-consolidation-baseline`
 - Source base commit before this review snapshot: `6350221ad0d818829d4485c4ac8cebc7df405ad6`
-- Review snapshot commit: see the commit containing this file and the final
-  handoff report for the exact branch HEAD.
+- Review snapshot commit: `c3f354ef6b324c108b5e44243c578b119ea3935f`
 
 No functional code was changed for the purpose of creating this index. The
 snapshot branch includes the current accepted `next/` baseline for review.
@@ -161,4 +160,3 @@ The latest standard Macro editor follow-up validation before this snapshot was:
 - `BAKeySmith.App --smoke`: PASS
 
 No additional build or test gate is required for this index-only snapshot step.
-

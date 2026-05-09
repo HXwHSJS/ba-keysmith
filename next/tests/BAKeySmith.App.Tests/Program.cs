@@ -1,4 +1,5 @@
 using System.IO;
+using System.Reflection;
 using System.Text.Json;
 using System.Windows.Input;
 using BAKeySmith.App.Controls;
@@ -6,8 +7,12 @@ using BAKeySmith.App.Models;
 using BAKeySmith.App.Services;
 using BAKeySmith.App.ViewModels;
 using BAKeySmith.Core.Configuration;
+using BAKeySmith.Core.Configuration.V2;
 using BAKeySmith.Core.Contracts;
 using BAKeySmith.Core.Foreground;
+using BAKeySmith.Core.Input.V2;
+using BAKeySmith.Core.Input.V2.Conflicts;
+using BAKeySmith.Core.Mappings.V2;
 using BAKeySmith.Core.Scripting;
 using BAKeySmith.Core.Triggers;
 
@@ -65,6 +70,14 @@ var tests = new (string Name, Func<Task> Run)[]
     ("runtime_controller_blocks_dispatch_when_foreground_is_app", RuntimeControllerBlocksDispatchWhenForegroundIsAppAsync),
     ("runtime_controller_allows_dispatch_when_foreground_is_target", RuntimeControllerAllowsDispatchWhenForegroundIsTargetAsync),
     ("runtime_control_commands_route_callbacks", RuntimeControlCommandsRouteCallbacks),
+    ("app_config_v2_draft_sandbox_save_load_roundtrip", AppConfigV2DraftSandboxSaveLoadRoundtripAsync),
+    ("app_config_v2_draft_sandbox_warning_only_save", AppConfigV2DraftSandboxWarningOnlySaveAsync),
+    ("app_config_v2_draft_sandbox_rejects_errors_and_bad_paths", AppConfigV2DraftSandboxRejectsErrorsAndBadPathsAsync),
+    ("app_config_v2_draft_sandbox_load_boundaries", AppConfigV2DraftSandboxLoadBoundariesAsync),
+    ("app_config_v2_draft_sandbox_path_policy", AppConfigV2DraftSandboxPathPolicyAsync),
+    ("app_config_v2_draft_sandbox_warning_only_load", AppConfigV2DraftSandboxWarningOnlyLoadAsync),
+    ("app_config_v2_draft_sandbox_io_and_parent_directory", AppConfigV2DraftSandboxIoAndParentDirectoryAsync),
+    ("app_config_v2_draft_sandbox_does_not_touch_v1_or_runtime", AppConfigV2DraftSandboxDoesNotTouchV1OrRuntimeAsync),
     ("backup_before_save_writes_previous_content", BackupBeforeSaveWritesPreviousContentAsync),
     ("runtime_reload_rejects_invalid_config_and_keeps_previous_runtime_config", RuntimeReloadRejectsInvalidConfigAndKeepsPreviousRuntimeConfigAsync),
     ("runtime_controller_start_stop_reload_dry_wiring", RuntimeControllerStartStopReloadDryWiringAsync)
@@ -1281,6 +1294,291 @@ static Task MappingEditorDirtyState()
     return Task.CompletedTask;
 }
 
+static async Task AppConfigV2DraftSandboxSaveLoadRoundtripAsync()
+{
+    var directory = CreateTempDirectory();
+    var path = Path.Combine(directory, "config.v2.draft.json");
+    var service = new AppConfigV2DraftDocumentService();
+
+    var save = await service.SaveAsync(path, CreateAppConfigV2DraftConfig(), CancellationToken.None);
+    Assert(save.Saved, "valid AppConfigV2 draft should be saved.");
+    Assert(save.IsDraftOnly, "AppConfigV2 draft service result should be marked draft-only.");
+    Assert(save.CanSaveDraft, "valid AppConfigV2 draft result should be saveable.");
+    Assert(File.Exists(path), "explicit AppConfigV2 draft path should be written.");
+
+    var load = service.Load(path);
+    Assert(load.Loaded, "saved AppConfigV2 draft should load.");
+    Assert(load.Config is not null, "loaded AppConfigV2 draft should include config.");
+    Assert(!load.HasErrors, "valid AppConfigV2 draft load should not report errors.");
+    Assert(load.Config!.Mappings[0].Trigger?.Input?.CanonicalName == "left_ctrl",
+        "side-specific trigger canonical name should survive save/load.");
+    Assert(load.Config.Mappings[0].ActionSource is MappingActionSourceV2.SimpleMapping simple &&
+            simple.Definition.Target.Input?.CanonicalName == "q",
+        "simple mapping source should survive save/load.");
+    Assert(load.Config.Mappings[1].Enabled == false &&
+            load.Config.Mappings[1].Trigger is null &&
+            load.Config.Mappings[1].ActionSource is MappingActionSourceV2.MacroDslV2Source macro &&
+            macro.SourceText == "on_down\nend",
+        "disabled macro draft without trigger and macro source should survive save/load.");
+}
+
+static async Task AppConfigV2DraftSandboxWarningOnlySaveAsync()
+{
+    var directory = CreateTempDirectory();
+    var path = Path.Combine(directory, "config.v2.draft.json");
+    var service = new AppConfigV2DraftDocumentService();
+    var config = AppConfigV2.Create(
+    [
+        new MappingConfigV2(
+            "macro-empty",
+            "Macro Empty",
+            Enabled: false,
+            Trigger: null,
+            ActionSource: new MappingActionSourceV2.MacroDslV2Source(string.Empty))
+    ]);
+
+    var save = await service.SaveAsync(path, config, CancellationToken.None);
+
+    Assert(save.Saved, "warning-only AppConfigV2 draft should still save.");
+    Assert(save.CanSaveDraft, "warning-only AppConfigV2 draft should be saveable.");
+    Assert(!save.BlocksSave, "warning-only AppConfigV2 draft should not block save.");
+    Assert(save.Diagnostics.Any(diagnostic =>
+            diagnostic.Severity == AppConfigV2DiagnosticSeverity.Warning &&
+            diagnostic.Code == AppConfigV2DiagnosticCode.EmptyMacroSource),
+        "empty macro source warning should be retained by draft save.");
+    Assert(File.Exists(path), "warning-only draft save should write the explicit draft file.");
+}
+
+static async Task AppConfigV2DraftSandboxRejectsErrorsAndBadPathsAsync()
+{
+    var directory = CreateTempDirectory();
+    var service = new AppConfigV2DraftDocumentService();
+
+    AssertThrows<InvalidOperationException>(
+        () => service.Load(Path.Combine(directory, "config.json")),
+        "AppConfigV2 draft sandbox must reject ordinary config.json paths.");
+    AssertThrows<InvalidOperationException>(
+        () => service.Load(Path.Combine(directory, "config.v2.json")),
+        "AppConfigV2 draft sandbox must reject paths without .v2.draft.json suffix.");
+
+    var path = Path.Combine(directory, "config.v2.draft.json");
+    await File.WriteAllTextAsync(path, "old-draft-content");
+    var invalidConfig = new AppConfigV2(
+        Version: 1,
+        Mappings: []);
+
+    var save = await service.SaveAsync(path, invalidConfig, CancellationToken.None);
+
+    Assert(!save.Saved, "blocking diagnostics should refuse AppConfigV2 draft save.");
+    Assert(save.BlocksSave, "invalid AppConfigV2 draft should report BlocksSave.");
+    Assert(!save.CanSaveDraft, "invalid AppConfigV2 draft should not be saveable.");
+    Assert(save.IsDraftOnly, "refused AppConfigV2 draft save should still be marked draft-only.");
+    Assert((await File.ReadAllTextAsync(path)) == "old-draft-content",
+        "refused draft save must not overwrite existing file.");
+}
+
+static async Task AppConfigV2DraftSandboxLoadBoundariesAsync()
+{
+    var directory = CreateTempDirectory();
+    var service = new AppConfigV2DraftDocumentService();
+    var missingPath = Path.Combine(directory, "missing.v2.draft.json");
+
+    var missing = service.Load(missingPath);
+    Assert(!missing.Loaded, "missing AppConfigV2 draft should return controlled unloaded result.");
+    Assert(missing.Config is null, "missing AppConfigV2 draft should not create in-memory config.");
+    Assert(missing.IsDraftOnly, "missing AppConfigV2 draft result should be marked draft-only.");
+    Assert(!missing.HasErrors, "missing AppConfigV2 draft result should not be an error.");
+    Assert(!missing.CanSaveDraft, "missing AppConfigV2 draft result should not be saveable without config.");
+    Assert(missing.Diagnostics.Any(diagnostic =>
+            diagnostic.Severity == AppConfigV2DiagnosticSeverity.Info &&
+            diagnostic.Code == AppConfigV2DiagnosticCode.DraftFileMissing &&
+            diagnostic.Path == Path.GetFullPath(missingPath)),
+        "missing AppConfigV2 draft should include an explicit missing-file diagnostic.");
+    Assert(!File.Exists(missingPath), "missing draft load must not create a file.");
+
+    var invalidPath = Path.Combine(directory, "invalid.v2.draft.json");
+    await File.WriteAllTextAsync(invalidPath, "{ nope");
+    var invalid = service.Load(invalidPath);
+    Assert(!invalid.Loaded, "invalid JSON draft should not load as config.");
+    Assert(invalid.Diagnostics.Any(diagnostic => diagnostic.Code == AppConfigV2DiagnosticCode.InvalidJson),
+        "invalid JSON draft should retain serializer diagnostics.");
+}
+
+static async Task AppConfigV2DraftSandboxPathPolicyAsync()
+{
+    var directory = CreateTempDirectory();
+    var service = new AppConfigV2DraftDocumentService();
+
+    var acceptedPath = Path.Combine(directory, "config.v2.draft.json");
+    var missing = service.Load(acceptedPath);
+    Assert(missing.Path == Path.GetFullPath(acceptedPath),
+        "accepted AppConfigV2 draft paths should be normalized to full paths.");
+
+    var previousCurrentDirectory = Directory.GetCurrentDirectory();
+    try
+    {
+        Directory.SetCurrentDirectory(directory);
+        const string relativeUppercasePath = "relative-config.V2.DRAFT.JSON";
+        var save = await service.SaveAsync(
+            relativeUppercasePath,
+            CreateAppConfigV2DraftConfig(),
+            CancellationToken.None);
+
+        Assert(save.Saved, "relative uppercase AppConfigV2 draft suffix should be accepted.");
+        Assert(save.Path == Path.GetFullPath(relativeUppercasePath),
+            "relative AppConfigV2 draft path should be normalized before use.");
+        Assert(File.Exists(save.Path), "relative AppConfigV2 draft save should write normalized full path.");
+    }
+    finally
+    {
+        Directory.SetCurrentDirectory(previousCurrentDirectory);
+    }
+
+    AssertThrows<InvalidOperationException>(
+        () => service.Load(Path.Combine(directory, "config.json")),
+        "AppConfigV2 draft sandbox must reject ordinary config.json paths.");
+    AssertThrows<InvalidOperationException>(
+        () => service.Load(Path.Combine(directory, "config.v2.json")),
+        "AppConfigV2 draft sandbox must reject paths without .v2.draft.json suffix.");
+    AssertThrows<InvalidOperationException>(
+        () => service.Load("  "),
+        "AppConfigV2 draft sandbox must reject empty paths.");
+
+    var directoryPath = Path.Combine(directory, "folder.v2.draft.json");
+    Directory.CreateDirectory(directoryPath);
+    AssertThrows<InvalidOperationException>(
+        () => service.Load(directoryPath),
+        "AppConfigV2 draft sandbox must reject directory paths even when the directory name has the draft suffix.");
+}
+
+static async Task AppConfigV2DraftSandboxWarningOnlyLoadAsync()
+{
+    var directory = CreateTempDirectory();
+    var path = Path.Combine(directory, "warning.v2.draft.json");
+    await File.WriteAllTextAsync(
+        path,
+        """
+        {
+          "version": 2,
+          "mappings": [
+            {
+              "id": "macro-empty",
+              "name": "Macro Empty",
+              "enabled": false,
+              "action": {
+                "kind": "macro_dsl_v2",
+                "source": ""
+              }
+            }
+          ]
+        }
+        """);
+    var service = new AppConfigV2DraftDocumentService();
+
+    var load = service.Load(path);
+
+    Assert(load.Loaded, "warning-only AppConfigV2 draft should still load.");
+    Assert(load.Config is not null, "warning-only AppConfigV2 draft should include config.");
+    Assert(!load.HasErrors, "warning-only AppConfigV2 draft load should not have errors.");
+    Assert(load.CanSaveDraft, "warning-only AppConfigV2 draft load should be saveable as draft.");
+    Assert(load.Diagnostics.Any(diagnostic =>
+            diagnostic.Severity == AppConfigV2DiagnosticSeverity.Warning &&
+            diagnostic.Code == AppConfigV2DiagnosticCode.EmptyMacroSource),
+        "warning-only AppConfigV2 draft load should retain the empty macro warning.");
+}
+
+static async Task AppConfigV2DraftSandboxIoAndParentDirectoryAsync()
+{
+    var directory = CreateTempDirectory();
+    var service = new AppConfigV2DraftDocumentService();
+    var nestedPath = Path.Combine(directory, "nested", "drafts", "config.v2.draft.json");
+
+    var save = await service.SaveAsync(nestedPath, CreateAppConfigV2DraftConfig(), CancellationToken.None);
+
+    Assert(save.Saved, "valid AppConfigV2 draft save should create nested parent directories.");
+    Assert(File.Exists(nestedPath), "nested AppConfigV2 draft file should be written.");
+
+    var parentFile = Path.Combine(directory, "parent-file");
+    await File.WriteAllTextAsync(parentFile, "keep-parent-file");
+    var ioFailurePath = Path.Combine(parentFile, "config.v2.draft.json");
+
+    var ioFailure = await service.SaveAsync(ioFailurePath, CreateAppConfigV2DraftConfig(), CancellationToken.None);
+
+    Assert(!ioFailure.Saved, "AppConfigV2 draft IO failure should not report saved.");
+    Assert(ioFailure.IsDraftOnly, "AppConfigV2 draft IO failure should still be marked draft-only.");
+    Assert(ioFailure.BlocksSave, "AppConfigV2 draft IO failure should block save.");
+    Assert(ioFailure.Diagnostics.Any(diagnostic =>
+            diagnostic.Severity == AppConfigV2DiagnosticSeverity.Error &&
+            diagnostic.Code == AppConfigV2DiagnosticCode.DraftDocumentIoError),
+        "AppConfigV2 draft IO failure should return a controlled IO diagnostic.");
+    Assert((await File.ReadAllTextAsync(parentFile)) == "keep-parent-file",
+        "AppConfigV2 draft IO failure must not alter the existing parent file.");
+}
+
+static async Task AppConfigV2DraftSandboxDoesNotTouchV1OrRuntimeAsync()
+{
+    var directory = CreateTempDirectory();
+    var v1Path = Path.Combine(directory, "config.json");
+    var v2Path = Path.Combine(directory, "config.v2.draft.json");
+    await File.WriteAllTextAsync(v1Path, "{\"version\":1,\"root_unknown\":\"keep\"}");
+    var service = new AppConfigV2DraftDocumentService();
+
+    await service.SaveAsync(v2Path, CreateAppConfigV2DraftConfig(), CancellationToken.None);
+    Assert((await File.ReadAllTextAsync(v1Path)).Contains("root_unknown", StringComparison.Ordinal),
+        "AppConfigV2 draft sandbox must not modify adjacent V1 config file.");
+
+    const string unknownJson = """
+        {
+          "version": 2,
+          "unknown_root": true,
+          "mappings": [
+            {
+              "id": "unknowns",
+              "enabled": true,
+              "unknown_mapping": true,
+              "trigger": { "kind": "single_input", "input": "q" },
+              "action": {
+                "kind": "simple",
+                "mode": "tap",
+                "unknown_action": true,
+                "target": {
+                  "kind": "input",
+                  "input": "a",
+                  "unknown_target": true
+                }
+              }
+            }
+          ]
+        }
+        """;
+    await File.WriteAllTextAsync(v2Path, unknownJson);
+    var loaded = service.Load(v2Path);
+    Assert(loaded.Loaded, "draft file with unknown fields should load through draft parser.");
+    var saveWithoutUnknowns = await service.SaveAsync(v2Path, loaded.Config!, CancellationToken.None);
+    Assert(saveWithoutUnknowns.Saved, "loaded draft should save back through explicit draft path.");
+    var emitted = await File.ReadAllTextAsync(v2Path);
+    Assert(!emitted.Contains("unknown_root", StringComparison.Ordinal) &&
+            !emitted.Contains("unknown_mapping", StringComparison.Ordinal) &&
+            !emitted.Contains("unknown_action", StringComparison.Ordinal) &&
+            !emitted.Contains("unknown_target", StringComparison.Ordinal),
+        "draft sandbox intentionally does not preserve unknown fields.");
+
+    var referencedTypeNames = typeof(AppConfigV2DraftDocumentService)
+        .GetFields(BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.Public)
+        .Select(field => field.FieldType.FullName ?? field.FieldType.Name)
+        .Concat(typeof(AppConfigV2DraftDocumentService)
+            .GetMethods(BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.DeclaredOnly)
+            .SelectMany(method => method.GetParameters()
+                .Select(parameter => parameter.ParameterType.FullName ?? parameter.ParameterType.Name)
+                .Append(method.ReturnType.FullName ?? method.ReturnType.Name)))
+        .ToArray();
+
+    Assert(!referencedTypeNames.Any(name => name.Contains("AppConfigSerializer", StringComparison.Ordinal)),
+        "AppConfigV2 draft sandbox service must not reference V1 AppConfigSerializer.");
+    Assert(!referencedTypeNames.Any(name => name.Contains("RuntimeHostController", StringComparison.Ordinal)),
+        "AppConfigV2 draft sandbox service must not reference RuntimeHostController.");
+}
+
 static async Task BackupBeforeSaveWritesPreviousContentAsync()
 {
     var directory = CreateTempDirectory();
@@ -1444,6 +1742,33 @@ static AppConfigV1 CreateSingleTapConfig()
     };
 }
 
+static AppConfigV2 CreateAppConfigV2DraftConfig()
+{
+    return AppConfigV2.Create(
+    [
+        new MappingConfigV2(
+            "simple-left-ctrl",
+            "Simple Left Ctrl",
+            Enabled: true,
+            TriggerConfigV2.SingleInput(InputNameResolverV2.Resolve("left_ctrl")),
+            new MappingActionSourceV2.SimpleMapping(new SimpleMappingDefinitionV2(
+                "simple-left-ctrl",
+                SimpleMappingModeV2.Hold,
+                SimpleMappingTargetV2.FromInput(InputNameResolverV2.Resolve("q"))))),
+        new MappingConfigV2(
+            "macro-draft",
+            "Macro Draft",
+            Enabled: false,
+            Trigger: null,
+            ActionSource: new MappingActionSourceV2.MacroDslV2Source("on_down\nend"))
+    ],
+    controlHotkey: HotkeySpecV2.Parse("f5"),
+    coordinateRecordHotkey: CoordinateRecordHotkeySpecV2.Parse("mouse_x1"),
+    emergencyStopHotkey: HotkeySpecV2.Parse("f12"),
+    defaultTiming: new TimingSettingsV2(TapKeyDuration: TimeSpan.FromMilliseconds(30)),
+    defaultCoordinateSettings: new CoordinateSettingsV2("ba16_1920x1080"));
+}
+
 static MacroCompletionPopupDecision CompletionDecision(
     string script,
     MacroCompletionPopupContext? dismissedContext = null,
@@ -1500,6 +1825,21 @@ static void Assert(bool condition, string message)
     {
         throw new InvalidOperationException(message);
     }
+}
+
+static TException AssertThrows<TException>(Action action, string message)
+    where TException : Exception
+{
+    try
+    {
+        action();
+    }
+    catch (TException ex)
+    {
+        return ex;
+    }
+
+    throw new InvalidOperationException(message);
 }
 
 sealed class FakeElevationStatusService(bool isElevated) : IElevationStatusService

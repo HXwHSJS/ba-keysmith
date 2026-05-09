@@ -7,9 +7,14 @@ behavior.
 ## Status
 
 - Current C# `next` supports GUI focused key capture v1 but not full v2 input.
-- Current side-specific modifiers still fold into generic modifiers.
+- Current v1 runtime/config paths still fold side-specific modifiers into
+  generic modifiers.
 - Current focused capture does not satisfy the full professional v2 key target.
-- This document is not implemented.
+- A parallel Input Model v2 skeleton exists in Core under `Input/V2`; it proves
+  v2 canonical names, aliases, display labels, and overlap rules without
+  changing v1 behavior.
+- A parallel Windows event normalization skeleton exists under `Input/V2/Capture`
+  and maps synthetic physical key / mouse metadata to v2 canonical names.
 
 ## Canonical Naming Rules
 
@@ -67,4 +72,3 @@ overlap, the conflict model must report it rather than letting both silently
 run.
 
 See [conflict-model-v2-design.md](conflict-model-v2-design.md).
-

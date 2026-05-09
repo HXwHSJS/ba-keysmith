@@ -1,8 +1,19 @@
 # Input Model V2 Design
 
-This document defines the future input model direction. It is planning-only and
-does not change `KeyNameResolver`, AppConfigV1, GUI capture, runtime hooks, or
-Macro DSL v1.
+This document defines the future input model direction.
+
+Implementation status:
+
+- an AppConfig/runtime-independent Input Model v2 skeleton exists under
+  `next/src/BAKeySmith.Core/Input/V2/`;
+- the skeleton covers canonical names, aliases, display labels, basic
+  capabilities, and generic-vs-side-specific modifier overlap;
+- a Core-only Conflict Model v2 skeleton now consumes these `InputSpec`
+  definitions for internal BAKS conflict checks;
+- a Core-only Windows event normalization skeleton now maps synthetic
+  keyboard / mouse metadata to `InputSpec`;
+- it is not wired into `KeyNameResolver`, AppConfigV1, GUI capture, runtime
+  hooks, or Macro DSL v1.
 
 ## Goal
 
@@ -90,4 +101,3 @@ Future fallback:
 - physical key identity.
 
 Raw fallback is a future design item, not current implementation.
-

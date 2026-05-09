@@ -1,7 +1,15 @@
 # Conflict Model V2 Design
 
-This document defines the future conflict model. It is planning-only and does
-not change current validation.
+This document defines the future conflict model.
+
+Implementation status:
+
+- a Core-only Conflict Model v2 skeleton exists under
+  `next/src/BAKeySmith.Core/Input/V2/Conflicts/`;
+- it uses `InputSpec`, `InputNameResolverV2`, and `InputOverlap` to detect
+  internal BAKS binding conflicts;
+- it is not wired into AppConfigV1, current runtime validation, GUI capture, or
+  GUI row highlighting.
 
 ## Categories
 
@@ -52,4 +60,3 @@ and may affect gameplay or user control.
 - risk warning with explicit opt-in;
 - Chinese-friendly errors;
 - canonical name plus friendly label where useful.
-

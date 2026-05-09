@@ -1,8 +1,14 @@
 # Input Capture V2 Design
 
-This document defines future input capture direction. It is planning-only and
-does not change current focused capture v1, hooks, runtime, AppConfigV1, or
-Macro DSL.
+This document defines future input capture direction.
+
+Implementation status:
+
+- a Core-only Windows event normalization skeleton exists under
+  `next/src/BAKeySmith.Core/Input/V2/Capture/`;
+- it converts synthetic Windows keyboard / mouse metadata into v2 `InputSpec`;
+- it is not integrated into WPF focused capture, hook-backed capture, runtime,
+  AppConfigV1, GUI, or Macro DSL.
 
 ## Goal
 
@@ -53,4 +59,3 @@ mouse inputs reliably, including side-specific modifiers and OEM punctuation.
 
 Raw input / scan-code fallback can be staged if the first v2 slice clearly
 states what remains unsupported.
-

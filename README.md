@@ -26,6 +26,7 @@
 
 ## 功能特性
 
+- 支持多配置管理，配置复制
 - 支持键盘按键映射，例如 `q` 映射为 `1`。
 - 支持 `hold` 和 `tap` 两种简单映射模式。
 - 支持键盘与鼠标触发键，包括如 `shift`、`crtl`、`alt`、`mouse_left`、`mouse_right`、`mouse_middle`、`mouse_x1`、`mouse_x2`。

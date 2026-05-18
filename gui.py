@@ -11,7 +11,10 @@ from pynput import mouse, keyboard as pynput_keyboard
 from mapper import KeyMapper
 from utils import (
     KEY_ALIASES, MOUSE_EVENTS, VK_CODES,
-    ensure_user_config_path, normalize_key_name
+    ensure_user_config_path, normalize_key_name,
+    is_game_window_foreground,
+    DEFAULT_CONFIG_NAME, list_configs, get_config_path_for,
+    create_config, delete_config_file, rename_config_file
 )
 
 # ---------- Windows API 用于输入法禁用 ----------
@@ -165,7 +168,7 @@ class KeyCaptureDialog:
             self.callback(self.captured_key)
         try:
             self.top.grab_release()
-        except:
+        except Exception:
             pass
         self.top.destroy()
         enable_ime()
@@ -180,7 +183,7 @@ class KeyCaptureDialog:
         self.stop_listeners()
         try:
             self.top.grab_release()
-        except:
+        except Exception:
             pass
         self.top.destroy()
         enable_ime()
@@ -193,14 +196,14 @@ class KeyCaptureDialog:
             try:
                 self.listener_keyboard.stop()
                 self.listener_keyboard.join(0.2)
-            except:
+            except Exception:
                 pass
             self.listener_keyboard = None
         if self.listener_mouse:
             try:
                 self.listener_mouse.stop()
                 self.listener_mouse.join(0.2)
-            except:
+            except Exception:
                 pass
             self.listener_mouse = None
 
@@ -327,7 +330,7 @@ class EditMappingDialog:
 
         try:
             self.top.grab_release()
-        except:
+        except Exception:
             pass
 
         def restore_grab():
@@ -374,7 +377,7 @@ class EditMappingDialog:
         self._closed = True
         try:
             self.top.grab_release()
-        except:
+        except Exception:
             pass
         self.top.destroy()
         if self.on_close:
@@ -743,7 +746,7 @@ class MacroEditorDialog:
         self._closed = True
         try:
             self.autocomplete.destroy()
-        except:
+        except Exception:
             pass
         self.top.destroy()
         if self.on_close:
@@ -780,7 +783,9 @@ class MapperGUI:
         self._config_load_error = None
         self._config_migrated_from = None
         self._game_status_after_id = None
-        self.config_path, self._config_migrated_from = ensure_user_config_path()
+        self.config_name = DEFAULT_CONFIG_NAME
+        _, self._config_migrated_from = ensure_user_config_path()
+        self.config_path = get_config_path_for(self.config_name)
         self.load_config()
 
         self.root = tk.Tk()
@@ -791,6 +796,7 @@ class MapperGUI:
 
         self.setup_styles()
         self.create_widgets()
+        self.refresh_config_list()
         self.refresh_table()
         center_window(self.root, 960, 680)
 
@@ -888,6 +894,214 @@ class MapperGUI:
         if normalized.get('type', 'simple') == 'simple' and 'target' in normalized:
             normalized['target'] = normalize_key_name(normalized['target'])
         return normalized
+
+    def refresh_config_list(self):
+        configs = list_configs()
+        current_value = self.config_name
+        names = [name for name, _ in configs]
+        self.config_combo['values'] = names
+        if current_value in names:
+            self.config_combo.set(current_value)
+        else:
+            self.config_combo.set(DEFAULT_CONFIG_NAME)
+            self.config_name = DEFAULT_CONFIG_NAME
+            self.config_path = get_config_path_for(self.config_name)
+            self.load_config()
+            self.refresh_table()
+        self._update_config_btns()
+
+    def _update_config_btns(self):
+        is_default = self.config_name == DEFAULT_CONFIG_NAME
+        new_state = 'disabled' if is_default else 'normal'
+        self.btn_rename_config.config(state=new_state)
+        self.btn_delete_config.config(state=new_state)
+
+    def on_config_selected(self, event=None):
+        selected = self.config_combo.get()
+        if not selected or selected == self.config_name:
+            return
+        self.switch_config(selected)
+
+    def switch_config(self, name):
+        if name == self.config_name:
+            return
+        was_running = self.mapper.running
+        if was_running:
+            self.stop_mapper()
+
+        self.save_config()
+        self.config_name = name
+        self.config_path = get_config_path_for(self.config_name)
+        self._config_load_error = None
+        self.mappings = []
+        self.load_config()
+        self.refresh_table()
+        self.hotkey_label.config(text=f"开关热键: {self.hotkey}")
+        self.log(f"已切换到配置方案: {self.config_name}")
+
+        if self._config_load_error:
+            self.root.after(50, lambda: messagebox.showwarning("配置读取失败", self._config_load_error))
+
+        if was_running:
+            self.start_mapper()
+
+        self._update_config_btns()
+
+    def create_new_config(self):
+        if self.mapper.running:
+            self._pause_mapper_for_dialog()
+
+        dialog = tk.Toplevel(self.root)
+        dialog.title("新建配置方案")
+        dialog.resizable(False, False)
+        dialog.transient(self.root)
+        dialog.grab_set()
+
+        main = ttk.Frame(dialog, padding=20)
+        main.pack(fill='both', expand=True)
+
+        ttk.Label(main, text="请输入新配置方案的名称", font=('Microsoft YaHei UI', 10, 'bold')).pack(anchor='w', pady=(0, 10))
+        name_var = tk.StringVar()
+        name_entry = ttk.Entry(main, textvariable=name_var, width=36)
+        name_entry.pack(fill='x', pady=(0, 10))
+
+        existing = [name for name, _ in list_configs()]
+        BLANK_OPTION = "-- 空白方案 --"
+        ttk.Label(main, text="基于现有方案复制（可选）:", style='Card.TLabel').pack(anchor='w', pady=(0, 4))
+        source_var = tk.StringVar(value=BLANK_OPTION)
+        source_combo_values = [BLANK_OPTION] + existing
+        source_combo = ttk.Combobox(main, textvariable=source_var, values=source_combo_values, state='readonly', width=34)
+        source_combo.pack(fill='x', pady=(0, 14))
+
+        def on_ok():
+            name = name_var.get().strip()
+            if not name:
+                messagebox.showerror("错误", "名称不能为空", parent=dialog)
+                return
+            if name in existing:
+                messagebox.showerror("错误", f"配置方案 '{name}' 已存在", parent=dialog)
+                return
+            try:
+                source = None if source_var.get() == BLANK_OPTION else source_var.get().strip()
+                create_config(name, source_name=source)
+                self.refresh_config_list()
+                self.switch_config(name)
+                dialog.destroy()
+            except ValueError as e:
+                messagebox.showerror("错误", str(e), parent=dialog)
+
+        sep = ttk.Separator(main, orient='horizontal')
+        sep.pack(fill='x', pady=(6, 10))
+
+        btn_frame = ttk.Frame(main)
+        btn_frame.pack(fill='x')
+        ttk.Button(btn_frame, text="创建方案", command=on_ok, style='Accent.TButton', width=14).pack(side='right', padx=(10, 0))
+        ttk.Button(btn_frame, text="取消", command=dialog.destroy, width=10).pack(side='right')
+
+        dialog.update_idletasks()
+        w = max(400, dialog.winfo_reqwidth() + 20)
+        h = max(220, dialog.winfo_reqheight() + 20)
+        dialog.minsize(w, h)
+        center_window(dialog, w, h)
+
+        name_entry.focus_set()
+        dialog.bind('<Return>', lambda e: on_ok())
+
+        def restore_mapper():
+            self._restore_mapper_after_dialog(self._dialog_pause_depth)
+
+        dialog.protocol("WM_DELETE_WINDOW", lambda: (restore_mapper(), dialog.destroy()))
+        self.root.wait_window(dialog)
+        restore_mapper()
+
+    def delete_current_config(self):
+        if self.config_name == DEFAULT_CONFIG_NAME:
+            return
+        if not messagebox.askyesno("确认删除", f"确定要删除配置方案 '{self.config_name}' 及其所有映射吗？\n此操作不可撤销。"):
+            return
+
+        if self.mapper.running:
+            self.stop_mapper()
+
+        try:
+            delete_config_file(self.config_name)
+        except OSError as e:
+            messagebox.showerror("错误", f"删除配置文件失败: {e}")
+            return
+
+        self.refresh_config_list()
+        self.switch_config(DEFAULT_CONFIG_NAME)
+        self.log(f"已删除配置方案: {self.config_name}")
+
+    def rename_current_config(self):
+        if self.config_name == DEFAULT_CONFIG_NAME:
+            return
+
+        if self.mapper.running:
+            self._pause_mapper_for_dialog()
+
+        dialog = tk.Toplevel(self.root)
+        dialog.title("重命名配置方案")
+        dialog.resizable(False, False)
+        dialog.transient(self.root)
+        dialog.grab_set()
+
+        main = ttk.Frame(dialog, padding=20)
+        main.pack(fill='both', expand=True)
+
+        ttk.Label(main, text="修改配置方案的名称", font=('Microsoft YaHei UI', 10, 'bold')).pack(anchor='w', pady=(0, 10))
+        ttk.Label(main, text=f"当前名称: {self.config_name}", style='Muted.TLabel').pack(anchor='w', pady=(0, 8))
+        ttk.Label(main, text="新名称:", style='Card.TLabel').pack(anchor='w', pady=(0, 4))
+        name_var = tk.StringVar()
+        name_entry = ttk.Entry(main, textvariable=name_var, width=36)
+        name_entry.pack(fill='x', pady=(0, 14))
+
+        existing = [name for name, _ in list_configs()]
+
+        def on_ok():
+            new_name = name_var.get().strip()
+            if not new_name:
+                messagebox.showerror("错误", "名称不能为空", parent=dialog)
+                return
+            if new_name in existing and new_name != self.config_name:
+                messagebox.showerror("错误", f"配置方案 '{new_name}' 已存在", parent=dialog)
+                return
+            try:
+                new_path = rename_config_file(self.config_name, new_name)
+                old_name = self.config_name
+                self.config_name = new_name
+                self.config_path = new_path
+                self.refresh_config_list()
+                self.log(f"配置方案已重命名: {old_name} -> {self.config_name}")
+                dialog.destroy()
+            except ValueError as e:
+                messagebox.showerror("错误", str(e), parent=dialog)
+
+        sep = ttk.Separator(main, orient='horizontal')
+        sep.pack(fill='x', pady=(6, 10))
+
+        btn_frame = ttk.Frame(main)
+        btn_frame.pack(fill='x')
+        ttk.Button(btn_frame, text="确认重命名", command=on_ok, style='Accent.TButton', width=14).pack(side='right', padx=(10, 0))
+        ttk.Button(btn_frame, text="取消", command=dialog.destroy, width=10).pack(side='right')
+
+        dialog.update_idletasks()
+        w = max(400, dialog.winfo_reqwidth() + 20)
+        h = max(180, dialog.winfo_reqheight() + 20)
+        dialog.minsize(w, h)
+        center_window(dialog, w, h)
+
+        name_entry.insert(0, self.config_name)
+        name_entry.select_range(0, tk.END)
+        name_entry.focus_set()
+        dialog.bind('<Return>', lambda e: on_ok())
+
+        def restore_mapper():
+            self._restore_mapper_after_dialog(self._dialog_pause_depth)
+
+        dialog.protocol("WM_DELETE_WINDOW", lambda: (restore_mapper(), dialog.destroy()))
+        self.root.wait_window(dialog)
+        restore_mapper()
 
     def save_config(self):
         self.mappings = [
@@ -1017,8 +1231,13 @@ class MapperGUI:
     def update_game_status(self):
         running = KeyMapper.check_game_running(self.mapper.target_process)
         if running:
-            self.game_status_var.set("游戏运行中")
-            self.game_status_label.configure(style='Running.Status.TLabel')
+            foreground = is_game_window_foreground(self.mapper.target_process)
+            if foreground:
+                self.game_status_var.set("游戏前台运行")
+                self.game_status_label.configure(style='Running.Status.TLabel')
+            else:
+                self.game_status_var.set("游戏后台运行")
+                self.game_status_label.configure(style='Paused.Status.TLabel')
         else:
             self.game_status_var.set("游戏未运行")
             self.game_status_label.configure(style='Idle.Status.TLabel')
@@ -1051,6 +1270,25 @@ class MapperGUI:
         self.game_status_var = tk.StringVar(value="检测中")
         self.game_status_label = ttk.Label(status_group, textvariable=self.game_status_var, style='Idle.Status.TLabel')
         self.game_status_label.pack(side='left')
+
+        config_bar = ttk.Frame(header_frame, style='App.TFrame')
+        config_bar.grid(row=1, column=0, columnspan=2, sticky='ew', pady=(6, 0))
+        config_bar.columnconfigure(1, weight=1)
+        ttk.Label(config_bar, text="配置方案", style='Card.TLabel').grid(row=0, column=0, padx=(0, 8))
+        self.config_var = tk.StringVar(value=self.config_name)
+        self.config_combo = ttk.Combobox(config_bar, textvariable=self.config_var, state='readonly', width=22)
+        self.config_combo.grid(row=0, column=1, sticky='ew', padx=(0, 8))
+        self.config_combo.bind('<<ComboboxSelected>>', self.on_config_selected)
+        self.btn_create_config = ttk.Button(config_bar, text="新建", command=self.create_new_config, style='Ghost.TButton')
+        self.btn_create_config.grid(row=0, column=2, padx=(0, 4))
+        self.btn_rename_config = ttk.Button(config_bar, text="重命名", command=self.rename_current_config, style='Ghost.TButton')
+        self.btn_rename_config.grid(row=0, column=3, padx=(0, 4))
+        self.btn_delete_config = ttk.Button(config_bar, text="删除", command=self.delete_current_config, style='Danger.TButton')
+        self.btn_delete_config.grid(row=0, column=4)
+        ToolTip(self.config_combo, "切换配置方案以快速使用不同映射列表")
+        ToolTip(self.btn_create_config, "基于当前方案或空白创建新配置方案")
+        ToolTip(self.btn_rename_config, "重命名当前配置方案（不能重命名默认方案）")
+        ToolTip(self.btn_delete_config, "删除当前配置方案（不能删除默认方案）")
 
         middle_frame = ttk.Frame(self.root, style='App.TFrame')
         middle_frame.grid(row=1, column=0, sticky='nsew', padx=22, pady=(0, 10))
@@ -1287,7 +1525,8 @@ class MapperGUI:
                 self.save_config()
                 self.refresh_table()
                 self.log(f"修改映射: {old_trigger} -> {updated_mapping['trigger']}")
-                self._reload_running_mapper("修改映射")
+                if not self._reload_running_mapper("修改映射"):
+                    messagebox.showwarning("提示", "映射已修改保存，但运行中的映射未更新。请重新点击启动按钮以应用更改。")
 
             existing_triggers = [
                 item.get('trigger', '')
@@ -1367,7 +1606,8 @@ class MapperGUI:
         self.target_var.set('')
         self.script_preview_var.set('')
         self.log(f"添加映射: {trigger} ({mtype})")
-        self._reload_running_mapper("添加映射")
+        if not self._reload_running_mapper("添加映射"):
+            messagebox.showwarning("提示", "映射已添加到列表，但运行中的映射未更新。请重新点击启动按钮以应用更改。")
 
     def delete_mapping(self):
         selected = self.tree.selection()
@@ -1383,7 +1623,8 @@ class MapperGUI:
         self.save_config()
         self.refresh_table()
         self.log(f"删除映射: {trigger}")
-        self._reload_running_mapper("删除映射")
+        if not self._reload_running_mapper("删除映射"):
+            messagebox.showwarning("提示", "映射已从列表删除，但运行中的映射未更新。请重新点击启动按钮以应用更改。")
 
     def start_mapper(self):
         if self.mapper.running:
@@ -1409,7 +1650,7 @@ class MapperGUI:
 
         try:
             keyboard.remove_hotkey(self.hotkey)
-        except:
+        except Exception:
             pass
         try:
             keyboard.add_hotkey(self.hotkey, self.toggle_from_hotkey)
@@ -1423,7 +1664,7 @@ class MapperGUI:
             self.mapper.stop()
             try:
                 keyboard.remove_hotkey(self.hotkey)
-            except:
+            except Exception:
                 pass
             messagebox.showerror("错误", f"启动映射失败: {e}")
             return
@@ -1461,7 +1702,7 @@ class MapperGUI:
         self._dialog_pause_previous_enabled = None
         try:
             keyboard.remove_hotkey(self.hotkey)
-        except:
+        except Exception:
             pass
         self._set_stopped_ui()
         self.log("映射已停止")
@@ -1476,7 +1717,7 @@ class MapperGUI:
         if self._game_status_after_id:
             try:
                 self.root.after_cancel(self._game_status_after_id)
-            except:
+            except Exception:
                 pass
             self._game_status_after_id = None
         self.stop_mapper()

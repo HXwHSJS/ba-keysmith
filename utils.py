@@ -3,6 +3,8 @@ import ctypes
 import os
 import shutil
 import sys
+import time
+import psutil
 from ctypes import wintypes
 from pathlib import Path
 
@@ -10,6 +12,8 @@ user32 = ctypes.windll.user32
 
 APP_NAME = "BAKeySmith"
 CONFIG_FILENAME = "config.json"
+CONFIG_PREFIX = "config_"
+DEFAULT_CONFIG_NAME = "默认方案"
 
 def get_user_config_dir():
     base_dir = os.environ.get('APPDATA')
@@ -224,7 +228,7 @@ def send_key_input(key_name, is_down):
     ki.wScan = scan
     ki.dwFlags = flags
     ki.time = 0
-    ki.dwExtraInfo = None
+    ki.dwExtraInfo = ctypes.POINTER(ctypes.c_ulong)()
 
     inp = INPUT()
     inp.type = INPUT_KEYBOARD
@@ -256,3 +260,129 @@ def get_cursor_pos():
     point = wintypes.POINT()
     user32.GetCursorPos(ctypes.byref(point))
     return point.x, point.y
+
+# ---------- 前台窗口检测 ----------
+_foreground_pid_cache = 0
+_foreground_result_cache = False
+_foreground_cache_time = 0.0
+FOREGROUND_CHECK_INTERVAL = 0.3
+
+def is_game_window_foreground(process_name):
+    global _foreground_pid_cache, _foreground_result_cache, _foreground_cache_time
+    now = time.perf_counter()
+    if now - _foreground_cache_time < FOREGROUND_CHECK_INTERVAL:
+        return _foreground_result_cache
+
+    _foreground_cache_time = now
+    hwnd = user32.GetForegroundWindow()
+    if not hwnd:
+        _foreground_result_cache = False
+        return False
+
+    pid = wintypes.DWORD()
+    user32.GetWindowThreadProcessId(hwnd, ctypes.byref(pid))
+    foreground_pid = pid.value
+
+    if foreground_pid == _foreground_pid_cache:
+        return _foreground_result_cache
+
+    _foreground_pid_cache = foreground_pid
+    name_lower = (process_name or "").lower()
+    try:
+        proc = psutil.Process(foreground_pid)
+        _foreground_result_cache = (proc.name() or '').lower() == name_lower
+    except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.ZombieProcess):
+        _foreground_result_cache = False
+    return _foreground_result_cache
+
+# ---------- 多配置文件管理 ----------
+def config_name_to_filename(name):
+    if not name or name == DEFAULT_CONFIG_NAME:
+        return CONFIG_FILENAME
+    return f"{CONFIG_PREFIX}{name}.json"
+
+def config_filename_to_name(filename):
+    if filename == CONFIG_FILENAME:
+        return DEFAULT_CONFIG_NAME
+    prefix = CONFIG_PREFIX
+    if filename.startswith(prefix) and filename.endswith(".json"):
+        return filename[len(prefix):-5]
+    return None
+
+def get_config_path_for(config_name):
+    filename = config_name_to_filename(config_name)
+    return get_user_config_dir() / filename
+
+def list_configs():
+    config_dir = get_user_config_dir()
+    if not config_dir.exists():
+        return [(DEFAULT_CONFIG_NAME, get_config_path_for(DEFAULT_CONFIG_NAME))]
+
+    configs = []
+    try:
+        for entry in config_dir.iterdir():
+            if not entry.is_file():
+                continue
+            name = config_filename_to_name(entry.name)
+            if name:
+                configs.append((name, entry))
+    except OSError:
+        pass
+
+    if not configs:
+        configs.append((DEFAULT_CONFIG_NAME, get_config_path_for(DEFAULT_CONFIG_NAME)))
+    else:
+        has_default = any(name == DEFAULT_CONFIG_NAME for name, _ in configs)
+        if not has_default:
+            configs.insert(0, (DEFAULT_CONFIG_NAME, get_config_path_for(DEFAULT_CONFIG_NAME)))
+    return configs
+
+def create_config(name, source_name=None):
+    if not name or not name.strip():
+        raise ValueError("配置名称不能为空")
+    name = name.strip()
+    if name == DEFAULT_CONFIG_NAME:
+        raise ValueError(f"不能与'{DEFAULT_CONFIG_NAME}'重名")
+
+    filename = config_name_to_filename(name)
+    target = get_user_config_dir() / filename
+    if target.exists():
+        raise ValueError(f"配置 '{name}' 已存在")
+
+    target.parent.mkdir(parents=True, exist_ok=True)
+
+    if source_name:
+        source = get_config_path_for(source_name)
+        if source.exists():
+            shutil.copy2(source, target)
+            return target
+
+    target.write_text('{"mappings": [], "hotkey": "ctrl+shift+f12"}', encoding='utf-8')
+    return target
+
+def delete_config_file(config_name):
+    if config_name == DEFAULT_CONFIG_NAME:
+        raise ValueError("不能删除默认配置方案")
+    target = get_config_path_for(config_name)
+    if not target.exists():
+        return False
+    target.unlink()
+    return True
+
+def rename_config_file(old_name, new_name):
+    if old_name == DEFAULT_CONFIG_NAME:
+        raise ValueError("不能重命名默认配置方案")
+    new_name = (new_name or "").strip()
+    if not new_name:
+        raise ValueError("新名称不能为空")
+    if new_name == DEFAULT_CONFIG_NAME:
+        raise ValueError(f"不能与'{DEFAULT_CONFIG_NAME}'重名")
+    if new_name == old_name:
+        return get_config_path_for(old_name)
+    target = get_config_path_for(new_name)
+    if target.exists():
+        raise ValueError(f"配置 '{new_name}' 已存在")
+    source = get_config_path_for(old_name)
+    target.parent.mkdir(parents=True, exist_ok=True)
+    source.replace(target)
+    return target

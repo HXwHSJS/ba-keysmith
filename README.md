@@ -17,7 +17,8 @@
 
 ## 主界面
 
-<img width="962" height="712" alt="image" src="https://github.com/user-attachments/assets/eaab4a8d-175a-4875-938a-e51ed13bfb67" />
+<img width="962" height="712" alt="屏幕截图 2026-05-19 034558" src="https://github.com/user-attachments/assets/c4eaa154-5d9f-4b69-a412-f2ec206bd5d2" />
+
 
 ## 宏编辑界面
 

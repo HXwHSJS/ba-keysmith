@@ -1677,6 +1677,7 @@ class MapperGUI:
             return
 
         self._ensure_mapper_monitor_thread()
+        self.mapper.set_enabled(True)
 
         self.btn_start.config(state='disabled')
         self.btn_stop.config(state='normal')

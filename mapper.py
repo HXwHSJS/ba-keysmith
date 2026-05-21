@@ -38,7 +38,7 @@ class KeyMapper:
         self.macro_pointer_delay = 0.0005
         self.macro_combo_key_gap = 0.0005
         self.macro_combo_hold = 0.001
-        self._game_check_interval = 0.5
+        self._game_check_interval = 0.05
         self._last_game_check = 0
         self._last_game_running = False
         self._last_game_foreground = False
@@ -219,6 +219,8 @@ class KeyMapper:
             loop_stack = []
 
             while pc < len(instructions):
+                if not self.running:
+                    break
                 if self._macro_stop_flags.get(trigger, False):
                     break
 
@@ -474,8 +476,10 @@ class KeyMapper:
             self.running = False
             self.stop_active_macros()
             with self._macro_lock:
-                self._macro_threads.clear()
-                self._macro_stop_flags.clear()
+                for trigger in list(self._macro_threads.keys()):
+                    if not self._macro_threads[trigger].is_alive():
+                        self._macro_threads.pop(trigger, None)
+                        self._macro_stop_flags.pop(trigger, None)
             if self.mouse_listener:
                 try:
                     self.mouse_listener.stop()

@@ -11,7 +11,7 @@ from pynput import mouse
 from mapper import KeyMapper
 from utils import (
     KEY_ALIASES, MOUSE_EVENTS, VK_CODES,
-    ensure_user_config_path, normalize_key_name,
+    ensure_user_config_path, normalize_key_name, validate_config_name,
     is_game_window_foreground,
     DEFAULT_CONFIG_NAME, list_configs, get_config_path_for,
     create_config, delete_config_file, rename_config_file
@@ -504,6 +504,8 @@ class MacroEditorDialog:
         self.line_numbers = LineNumberCanvas(text_frame, self.text, bg='#f0f0f0', highlightthickness=0)
         self.line_numbers.pack(side='left', fill='y')
 
+        self._syntax_after_id = None
+
         # 垂直滚动条
         scrollbar = ttk.Scrollbar(main_frame, orient='vertical', command=self.text.yview)
         self.text.configure(yscrollcommand=lambda *args: (scrollbar.set(*args), self.line_numbers.redraw()))
@@ -583,11 +585,16 @@ class MacroEditorDialog:
     def on_key_release(self, event=None):
         self.highlight_syntax()
         self.line_numbers.redraw()
-        # 延迟检查语法，避免卡顿
-        self.top.after(300, self.check_syntax)
+        if self._syntax_after_id is not None:
+            self.top.after_cancel(self._syntax_after_id)
+        self._syntax_after_id = self.top.after(300, self._check_syntax_scheduled)
         ignored = {'Escape', 'Return', 'Tab', 'Up', 'Down', 'Left', 'Right'}
         if event is None or event.keysym not in ignored:
             self.top.after(1, self.show_autocomplete)
+
+    def _check_syntax_scheduled(self):
+        self._syntax_after_id = None
+        self.check_syntax()
 
     def after_programmatic_edit(self):
         self.highlight_syntax()
@@ -716,11 +723,10 @@ class MacroEditorDialog:
             return 'break'
 
     def _on_save(self):
-        # 保存前检查语法
         self.check_syntax()
         if '错误' in self.status_var.get() or '语法错误' in self.status_var.get():
-            if not messagebox.askyesno("语法错误", "脚本存在语法错误，确定保存吗？\n保存后可能无法正常执行。"):
-                return
+            messagebox.showerror("语法错误", "脚本存在语法错误，请修正后再保存。")
+            return
         script = self.strip_help_template(self.text.get('1.0', tk.END)).strip()
         if self.callback:
             self.callback(script)
@@ -937,8 +943,7 @@ class MapperGUI:
         self._update_config_btns()
 
     def create_new_config(self):
-        if self.mapper.running:
-            self._pause_mapper_for_dialog()
+        pause_token = self._pause_mapper_for_dialog()
 
         dialog = tk.Toplevel(self.root)
         dialog.title("新建配置方案")
@@ -997,7 +1002,7 @@ class MapperGUI:
         dialog.bind('<Return>', lambda e: on_ok())
 
         def restore_mapper():
-            self._restore_mapper_after_dialog(self._dialog_pause_depth)
+            self._restore_mapper_after_dialog(pause_token)
 
         dialog.protocol("WM_DELETE_WINDOW", lambda: (restore_mapper(), dialog.destroy()))
         self.root.wait_window(dialog)
@@ -1026,8 +1031,7 @@ class MapperGUI:
         if self.config_name == DEFAULT_CONFIG_NAME:
             return
 
-        if self.mapper.running:
-            self._pause_mapper_for_dialog()
+        pause_token = self._pause_mapper_for_dialog()
 
         dialog = tk.Toplevel(self.root)
         dialog.title("重命名配置方案")
@@ -1086,7 +1090,7 @@ class MapperGUI:
         dialog.bind('<Return>', lambda e: on_ok())
 
         def restore_mapper():
-            self._restore_mapper_after_dialog(self._dialog_pause_depth)
+            self._restore_mapper_after_dialog(pause_token)
 
         dialog.protocol("WM_DELETE_WINDOW", lambda: (restore_mapper(), dialog.destroy()))
         self.root.wait_window(dialog)
@@ -1183,18 +1187,20 @@ class MapperGUI:
     def _pause_mapper_for_dialog(self):
         if not self.mapper.running:
             return None
-        if self._dialog_pause_depth == 0:
+        self._dialog_pause_depth += 1
+        if self._dialog_pause_depth == 1:
             self._dialog_pause_previous_enabled = self.mapper.enabled
             self.mapper.set_enabled(False)
         self.status_var.set("编辑中暂停")
         self.status_label.configure(style='Editing.Status.TLabel')
-        self._dialog_pause_depth += 1
-        return True
+        return self._dialog_pause_depth
 
     def _restore_mapper_after_dialog(self, pause_token):
         if pause_token is None:
             return
-        self._dialog_pause_depth = max(0, self._dialog_pause_depth - 1)
+        if self._dialog_pause_depth != pause_token:
+            return
+        self._dialog_pause_depth -= 1
         if self._dialog_pause_depth > 0:
             return
         previous_enabled = self._dialog_pause_previous_enabled
@@ -1476,11 +1482,23 @@ class MapperGUI:
             self._restore_mapper_after_dialog(pause_token)
 
         def set_hotkey(combo):
+            old = self.hotkey
             self.hotkey = combo
             self.hotkey_label.config(text=f"开关热键: {self.hotkey}")
             self.save_config()
             self.log(f"热键已设置为: {combo}")
-            messagebox.showinfo("提示", f"热键已设置为 {self.hotkey}，下次启动映射时生效。")
+            if self.mapper.running and old != self.hotkey:
+                try:
+                    keyboard.remove_hotkey(old)
+                except Exception:
+                    pass
+                try:
+                    keyboard.add_hotkey(self.hotkey, self.toggle_from_hotkey)
+                    messagebox.showinfo("提示", f"热键已更新为 {self.hotkey}")
+                except Exception as e:
+                    messagebox.showerror("错误", f"注册热键失败: {e}\n请停止并重新启动映射后重试。")
+            else:
+                messagebox.showinfo("提示", f"热键已设置为 {self.hotkey}，下次启动映射时生效。")
         HotkeyCaptureDialog(self.root, set_hotkey, on_close=on_close)
 
     def reset_hotkey(self):

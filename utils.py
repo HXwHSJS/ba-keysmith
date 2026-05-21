@@ -266,7 +266,7 @@ def get_cursor_pos():
 _foreground_pid_cache = 0
 _foreground_result_cache = False
 _foreground_cache_time = 0.0
-FOREGROUND_CHECK_INTERVAL = 0.3
+FOREGROUND_CHECK_INTERVAL = 0.05
 
 def is_game_window_foreground(process_name):
     global _foreground_pid_cache, _foreground_result_cache, _foreground_cache_time
@@ -297,6 +297,20 @@ def is_game_window_foreground(process_name):
     return _foreground_result_cache
 
 # ---------- 多配置文件管理 ----------
+INVALID_CONFIG_NAME_CHARS = set('\\/:*?"<>|')
+
+def validate_config_name(name):
+    name = (name or "").strip()
+    if not name:
+        raise ValueError("配置名称不能为空")
+    if len(name) > 64:
+        raise ValueError("配置名称不能超过 64 个字符")
+    if name in (".", "..") or ".." in name:
+        raise ValueError("配置名称不能包含路径跳转")
+    if any(ch in INVALID_CONFIG_NAME_CHARS for ch in name):
+        raise ValueError('配置名称不能包含 \\ / : * ? " < > |')
+    return name
+
 def config_name_to_filename(name):
     if not name or name == DEFAULT_CONFIG_NAME:
         return CONFIG_FILENAME
@@ -339,9 +353,7 @@ def list_configs():
     return configs
 
 def create_config(name, source_name=None):
-    if not name or not name.strip():
-        raise ValueError("配置名称不能为空")
-    name = name.strip()
+    name = validate_config_name(name)
     if name == DEFAULT_CONFIG_NAME:
         raise ValueError(f"不能与'{DEFAULT_CONFIG_NAME}'重名")
 
@@ -373,9 +385,7 @@ def delete_config_file(config_name):
 def rename_config_file(old_name, new_name):
     if old_name == DEFAULT_CONFIG_NAME:
         raise ValueError("不能重命名默认配置方案")
-    new_name = (new_name or "").strip()
-    if not new_name:
-        raise ValueError("新名称不能为空")
+    new_name = validate_config_name(new_name)
     if new_name == DEFAULT_CONFIG_NAME:
         raise ValueError(f"不能与'{DEFAULT_CONFIG_NAME}'重名")
     if new_name == old_name:

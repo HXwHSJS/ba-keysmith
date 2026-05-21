@@ -65,9 +65,11 @@ class ScriptCompiler:
                 elif cmd == 'wait':
                     if len(args) != 1:
                         raise ValueError(f"wait 需要一个参数（毫秒数）")
-                    ms = int(args[0])
+                    ms = float(args[0])
                     if ms < 0:
                         raise ValueError(f"wait 时间不能为负数")
+                    if ms > 600000:
+                        raise ValueError(f"wait 时间不能超过 600000 毫秒(10分钟)")
                     instructions.append(Instruction('wait', [ms], line_num))
 
                 elif cmd == 'loop':

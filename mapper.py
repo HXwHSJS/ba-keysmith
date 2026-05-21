@@ -175,21 +175,15 @@ class KeyMapper:
         if ms <= 0:
             return
         ms = ms * self.speed_factor
-        target = time.perf_counter() + (ms / 1000.0)
-        spin_threshold = 0.003
-        check_interval = 0.015
+        deadline = time.perf_counter() + (ms / 1000.0)
+        poll_interval = 0.01
         while True:
-            remaining = target - time.perf_counter()
+            remaining = deadline - time.perf_counter()
             if remaining <= 0:
                 break
             if self._macro_stop_flags.get(trigger, False):
                 break
-            if remaining > spin_threshold + check_interval:
-                time.sleep(remaining - spin_threshold)
-            elif remaining > spin_threshold:
-                time.sleep(check_interval)
-            else:
-                pass
+            time.sleep(min(remaining, poll_interval))
 
     @staticmethod
     def _normalize_key_name(key_name):
@@ -302,13 +296,18 @@ class KeyMapper:
                     self._macro_pause(self.macro_safe_delay)
                 elif op == 'combo':
                     keys = args
+                    stopped = False
                     for key in keys:
+                        if self._macro_stop_flags.get(trigger, False):
+                            stopped = True
+                            break
                         send_macro_key(key, True)
                         self._macro_pause(self.macro_combo_key_gap)
-                    self._macro_pause(self.macro_combo_hold)
-                    for key in reversed(keys):
-                        send_macro_key(key, False)
-                        self._macro_pause(self.macro_combo_key_gap)
+                    if not stopped:
+                        self._macro_pause(self.macro_combo_hold)
+                        for key in reversed(keys):
+                            send_macro_key(key, False)
+                            self._macro_pause(self.macro_combo_key_gap)
                     self._macro_pause(self.macro_safe_delay)
 
                 pc += 1
@@ -327,15 +326,19 @@ class KeyMapper:
         mapping_type = mapping['type']
 
         def handler(event):
-            if self._sending_depth > 0:
+            if not self.running:
+                return True
+
+            if self._sending_depth > 0 and event.event_type != 'up':
                 return True
 
             if not self.enabled or not self._is_game_active():
-                if event.event_type == 'up' and self.trigger_states.get(t, False):
-                    self.trigger_states[t] = False
-                    if mapping_type == 'simple' and mapping['mode'] == 'hold':
-                        self._send_key(mapping['target'], False)
-                    elif mapping_type == 'macro':
+                if event.event_type == 'up':
+                    if self.trigger_states.get(t, False):
+                        self.trigger_states[t] = False
+                        if mapping_type == 'simple' and mapping['mode'] == 'hold':
+                            self._send_key(mapping['target'], False)
+                    if mapping_type == 'macro':
                         self._macro_stop_flags[t] = True
                 return True
 
@@ -380,16 +383,12 @@ class KeyMapper:
                 return False
 
             elif event.event_type == 'up':
-                if not self.trigger_states.get(t, False):
-                    return False
-                self.trigger_states[t] = False
-
-                if mapping_type == 'simple' and mapping['mode'] == 'hold':
-                    self._send_key(mapping['target'], False)
-
-                elif mapping_type == 'macro':
+                if self.trigger_states.get(t, False):
+                    self.trigger_states[t] = False
+                    if mapping_type == 'simple' and mapping['mode'] == 'hold':
+                        self._send_key(mapping['target'], False)
+                if mapping_type == 'macro':
                     self._macro_stop_flags[t] = True
-
                 return False
             return True
         return handler

@@ -7,7 +7,7 @@ import threading
 import keyboard
 import ctypes
 import time
-from pynput import mouse, keyboard as pynput_keyboard
+from pynput import mouse
 from mapper import KeyMapper
 from utils import (
     KEY_ALIASES, MOUSE_EVENTS, VK_CODES,
@@ -39,24 +39,6 @@ def center_window(window, width=None, height=None):
         x = (window.winfo_screenwidth() - w) // 2
         y = (window.winfo_screenheight() - h) // 2
     window.geometry(f"{w}x{h}+{x}+{y}")
-
-def normalize_captured_key(key):
-    try:
-        key_name = key.char
-    except AttributeError:
-        key_name = str(key).replace('Key.', '').lower()
-
-    special_chars = {
-        ' ': 'space',
-        '\t': 'tab',
-        '\r': 'enter',
-        '\n': 'enter',
-    }
-    if key_name in special_chars:
-        return special_chars[key_name]
-    if isinstance(key_name, str):
-        return normalize_key_name(key_name)
-    return str(key_name).lower()
 
 class ToolTip:
     def __init__(self, widget, text, delay=450):
@@ -133,29 +115,32 @@ class KeyCaptureDialog:
         center_window(self.top)
 
     def start_listeners(self):
-        def on_press(key):
-            self.captured_key = normalize_captured_key(key)
-            self.top.after(10, self._close)
+        self.listener_keyboard = None
 
-        def on_click(x, y, button, pressed):
-            if pressed and self.capture_mouse:
-                btn_name = str(button).replace('Button.', '').lower()
-                if btn_name == 'left':
-                    self.captured_key = 'mouse_left'
-                elif btn_name == 'right':
-                    self.captured_key = 'mouse_right'
-                elif btn_name == 'middle':
-                    self.captured_key = 'mouse_middle'
-                elif btn_name in ('x1', 'x2'):
-                    self.captured_key = f'mouse_{btn_name}'
-                else:
-                    self.captured_key = btn_name
+        def on_key(event):
+            if event.event_type == 'down':
+                self.captured_key = normalize_key_name(event.name)
                 self.top.after(10, self._close)
-                return False
 
-        self.listener_keyboard = pynput_keyboard.Listener(on_press=on_press)
-        self.listener_keyboard.start()
+        self._kb_hook_id = keyboard.hook(on_key, suppress=True)
+
         if self.capture_mouse:
+            def on_click(x, y, button, pressed):
+                if pressed and self.capture_mouse:
+                    btn_name = str(button).replace('Button.', '').lower()
+                    if btn_name == 'left':
+                        self.captured_key = 'mouse_left'
+                    elif btn_name == 'right':
+                        self.captured_key = 'mouse_right'
+                    elif btn_name == 'middle':
+                        self.captured_key = 'mouse_middle'
+                    elif btn_name in ('x1', 'x2'):
+                        self.captured_key = f'mouse_{btn_name}'
+                    else:
+                        self.captured_key = btn_name
+                    self.top.after(10, self._close)
+                    return False
+
             self.listener_mouse = mouse.Listener(on_click=on_click)
             self.listener_mouse.start()
 
@@ -192,6 +177,12 @@ class KeyCaptureDialog:
             self.on_close()
 
     def stop_listeners(self):
+        if hasattr(self, '_kb_hook_id') and self._kb_hook_id is not None:
+            try:
+                keyboard.unhook(self._kb_hook_id)
+            except Exception:
+                pass
+            self._kb_hook_id = None
         if self.listener_keyboard:
             try:
                 self.listener_keyboard.stop()
@@ -220,27 +211,25 @@ class HotkeyCaptureDialog(KeyCaptureDialog):
             'shift_l': 'shift', 'shift_r': 'shift'
         }
         self.stop_listeners()
-        self.listener_keyboard = pynput_keyboard.Listener(
-            on_press=self.on_key_press, on_release=self.on_key_release)
-        self.listener_keyboard.start()
+
+        def kb_handler(event):
+            k = normalize_key_name(event.name)
+            k = self.modifier_map.get(k, k)
+            if event.event_type == 'down':
+                self.pressed_keys.add(k)
+                combo = '+'.join(sorted(self.pressed_keys))
+                for child in self.top.winfo_children():
+                    if isinstance(child, ttk.Label):
+                        child.config(text=f"当前按下: {combo}")
+            elif event.event_type == 'up' and self.pressed_keys:
+                combo = '+'.join(sorted(self.pressed_keys))
+                self.captured_key = combo
+                self.top.after(10, self._close)
+
+        self._kb_hook_id = keyboard.hook(kb_handler, suppress=True)
         for child in self.top.winfo_children():
             if isinstance(child, ttk.Label):
                 child.config(text="请按下热键... (支持单键如 F5，或组合键如 Ctrl+Shift+F12)")
-
-    def on_key_press(self, key):
-        k = normalize_captured_key(key)
-        k = self.modifier_map.get(k, k)
-        self.pressed_keys.add(k)
-        combo = '+'.join(sorted(self.pressed_keys))
-        for child in self.top.winfo_children():
-            if isinstance(child, ttk.Label):
-                child.config(text=f"当前按下: {combo}")
-
-    def on_key_release(self, key):
-        if self.pressed_keys:
-            combo = '+'.join(sorted(self.pressed_keys))
-            self.captured_key = combo
-            self.top.after(10, self._close)
 
 
 class EditMappingDialog:

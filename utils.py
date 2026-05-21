@@ -215,6 +215,7 @@ def send_key_input(key_name, is_down):
         0x26, 0x28, 0x25, 0x27,  # 方向键
         0x2D, 0x2E,              # Ins, Del
         0x21, 0x22, 0x23, 0x24,  # PageUp/Down, End, Home
+        0x90,                    # Num Lock
     }
     flags = KEYEVENTF_SCANCODE
     if vk in extended_keys:

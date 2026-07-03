@@ -11,6 +11,7 @@ from utils import (
     is_game_window_foreground
 )
 from script_compiler import ScriptCompiler
+from mapper_state import MacroRuntime, SyntheticKeyEventFilter, TriggerStateStore
 
 class KeyMapper:
     PAIRED_HOOK_TRIGGERS = {'tab', 'ctrl', 'alt', 'shift'}
@@ -22,15 +23,17 @@ class KeyMapper:
     def __init__(self):
         self.mappings = {}
         self.pressed_keys = set()
-        self.trigger_states = {}
+        self.trigger_state = TriggerStateStore()
+        self.trigger_states = self.trigger_state.states
         self.running = False
         self.enabled = True
         self.hook_handlers = {}
         self.target_process = "BlueArchive.exe"
         self._stop_lock = threading.Lock()
-        self._macro_lock = threading.Lock()
-        self._macro_threads = {}
-        self._macro_stop_flags = {}
+        self.macro_runtime = MacroRuntime()
+        self._macro_lock = self.macro_runtime.lock
+        self._macro_threads = self.macro_runtime.threads
+        self._macro_stop_flags = self.macro_runtime.stop_flags
         self.mouse_listener = None
         self.speed_factor = 1.0
         self.macro_safe_delay = 0.0
@@ -42,7 +45,7 @@ class KeyMapper:
         self._last_game_check = 0
         self._last_game_running = False
         self._last_game_foreground = False
-        self._sending_depth = 0
+        self.synthetic_key_events = SyntheticKeyEventFilter()
 
     def add_simple_mapping(self, trigger, target, mode='hold'):
         t = normalize_key_name(trigger)
@@ -51,7 +54,7 @@ class KeyMapper:
             'target': normalize_key_name(target),
             'mode': mode
         }
-        self.trigger_states[t] = False
+        self.trigger_state.register(t)
 
     def add_macro(self, trigger, script_text):
         t = normalize_key_name(trigger)
@@ -64,18 +67,17 @@ class KeyMapper:
             'script': script_text,
             'compiled': instructions
         }
-        self.trigger_states[t] = False
+        self.trigger_state.register(t)
 
     def remove_mapping(self, trigger):
         t = normalize_key_name(trigger)
         if t in self.mappings:
             del self.mappings[t]
-        if t in self.trigger_states:
-            del self.trigger_states[t]
+        self.trigger_state.remove(t)
 
     def clear_mappings(self):
         self.mappings.clear()
-        self.trigger_states.clear()
+        self.trigger_state.clear()
 
     @staticmethod
     def compile_mapping_entries(mapping_entries):
@@ -119,7 +121,7 @@ class KeyMapper:
 
     def replace_compiled_mappings(self, compiled_mappings, trigger_states):
         self.mappings = dict(compiled_mappings)
-        self.trigger_states = dict(trigger_states)
+        self.trigger_state.replace(trigger_states)
 
     def replace_mappings(self, mapping_entries):
         compiled_mappings, trigger_states = self.compile_mapping_entries(mapping_entries)
@@ -139,27 +141,28 @@ class KeyMapper:
         return self._last_game_foreground
 
     def _send_key(self, key_name, is_down):
-        self._sending_depth += 1
-        try:
-            key_name = normalize_key_name(key_name)
-            if is_mouse_key(key_name):
-                if not send_mouse_event(key_name, is_down):
-                    return False
-                if is_down:
-                    self.pressed_keys.add(key_name)
-                else:
-                    self.pressed_keys.discard(key_name)
-                return True
-
-            if not send_key_input(key_name, is_down):
+        key_name = normalize_key_name(key_name)
+        if is_mouse_key(key_name):
+            if not send_mouse_event(key_name, is_down):
                 return False
             if is_down:
                 self.pressed_keys.add(key_name)
             else:
                 self.pressed_keys.discard(key_name)
             return True
-        finally:
-            self._sending_depth -= 1
+
+        event_type = 'down' if is_down else 'up'
+        synthetic_token = None
+        if key_name in self.mappings:
+            synthetic_token = self.synthetic_key_events.mark(key_name, event_type)
+        if not send_key_input(key_name, is_down):
+            self.synthetic_key_events.cancel(synthetic_token)
+            return False
+        if is_down:
+            self.pressed_keys.add(key_name)
+        else:
+            self.pressed_keys.discard(key_name)
+        return True
 
     def _release_all(self):
         for key in list(self.pressed_keys):
@@ -181,7 +184,7 @@ class KeyMapper:
             remaining = deadline - time.perf_counter()
             if remaining <= 0:
                 break
-            if self._macro_stop_flags.get(trigger, False):
+            if self.macro_runtime.should_stop(trigger):
                 break
             time.sleep(min(remaining, poll_interval))
 
@@ -221,7 +224,7 @@ class KeyMapper:
             while pc < len(instructions):
                 if not self.running:
                     break
-                if self._macro_stop_flags.get(trigger, False):
+                if self.macro_runtime.should_stop(trigger):
                     break
 
                 instr = instructions[pc]
@@ -300,7 +303,7 @@ class KeyMapper:
                     keys = args
                     stopped = False
                     for key in keys:
-                        if self._macro_stop_flags.get(trigger, False):
+                        if self.macro_runtime.should_stop(trigger):
                             stopped = True
                             break
                         send_macro_key(key, True)
@@ -318,10 +321,7 @@ class KeyMapper:
             for key in list(local_pressed):
                 self._send_key(key, False)
                 self._macro_pause(self.macro_pointer_delay)
-            with self._macro_lock:
-                if self._macro_threads.get(trigger) is threading.current_thread():
-                    self._macro_threads.pop(trigger, None)
-                    self._macro_stop_flags.pop(trigger, None)
+            self.macro_runtime.finish_current(trigger)
 
     def _make_handler(self, trigger, mapping):
         t = normalize_key_name(trigger)
@@ -331,23 +331,30 @@ class KeyMapper:
             if not self.running:
                 return True
 
-            if self._sending_depth > 0 and event.event_type != 'up':
+            if self.synthetic_key_events.consume(t, event.event_type):
                 return True
 
             if not self.enabled or not self._is_game_active():
                 if event.event_type == 'up':
-                    if self.trigger_states.get(t, False):
-                        self.trigger_states[t] = False
+                    if self.trigger_state.is_pressed(t):
+                        self.trigger_state.release(t)
                         if mapping_type == 'simple' and mapping['mode'] == 'hold':
                             self._send_key(mapping['target'], False)
                     if mapping_type == 'macro':
-                        self._macro_stop_flags[t] = True
+                        self.macro_runtime.request_stop(t)
                 return True
 
             if event.event_type == 'down':
-                if self.trigger_states.get(t, False):
-                    return False
-                self.trigger_states[t] = True
+                if self.trigger_state.is_pressed(t):
+                    if is_mouse_key(t):
+                        if mapping_type == 'simple' and mapping.get('mode') == 'hold':
+                            self._send_key(mapping['target'], False)
+                        elif mapping_type == 'macro':
+                            self.macro_runtime.request_stop(t)
+                        self.trigger_state.release(t)
+                    else:
+                        return False
+                self.trigger_state.press(t)
 
                 if mapping_type == 'simple':
                     target = mapping['target']
@@ -361,36 +368,22 @@ class KeyMapper:
                         self._send_key(target, False)
 
                 elif mapping_type == 'macro':
-                    with self._macro_lock:
-                        old_thread = self._macro_threads.get(t)
-                        if old_thread and old_thread.is_alive():
-                            self._macro_stop_flags[t] = True
-                        else:
-                            old_thread = None
-                    if old_thread:
-                        old_thread.join(timeout=0.1)
-                        with self._macro_lock:
-                            if self._macro_threads.get(t) and self._macro_threads[t].is_alive():
-                                return False
-                    with self._macro_lock:
-                        self._macro_stop_flags[t] = False
-                        thread = threading.Thread(
-                            target=self._execute_macro,
-                            args=(t, mapping['compiled']),
-                            daemon=True
-                        )
-                        self._macro_threads[t] = thread
-                    thread.start()
+                    if not self.macro_runtime.start(
+                        t,
+                        self._execute_macro,
+                        args=(t, mapping['compiled'])
+                    ):
+                        return False
 
                 return False
 
             elif event.event_type == 'up':
-                if self.trigger_states.get(t, False):
-                    self.trigger_states[t] = False
+                if self.trigger_state.is_pressed(t):
+                    self.trigger_state.release(t)
                     if mapping_type == 'simple' and mapping['mode'] == 'hold':
                         self._send_key(mapping['target'], False)
                 if mapping_type == 'macro':
-                    self._macro_stop_flags[t] = True
+                    self.macro_runtime.request_stop(t)
                 return False
             return True
         return handler
@@ -475,11 +468,7 @@ class KeyMapper:
         try:
             self.running = False
             self.stop_active_macros()
-            with self._macro_lock:
-                for trigger in list(self._macro_threads.keys()):
-                    if not self._macro_threads[trigger].is_alive():
-                        self._macro_threads.pop(trigger, None)
-                        self._macro_stop_flags.pop(trigger, None)
+            self.macro_runtime.clear_finished()
             if self.mouse_listener:
                 try:
                     self.mouse_listener.stop()
@@ -500,24 +489,14 @@ class KeyMapper:
             self._stop_lock.release()
 
     def stop_active_macros(self, join_timeout=0.5):
-        threads_to_join = []
-        with self._macro_lock:
-            for t in self._macro_stop_flags:
-                self._macro_stop_flags[t] = True
-            threads_to_join = [
-                t for t in self._macro_threads.values()
-                if t is not threading.current_thread() and t.is_alive()
-            ]
-        for thread in threads_to_join:
-            thread.join(timeout=join_timeout)
+        self.macro_runtime.stop_all(join_timeout=join_timeout)
 
     def set_enabled(self, enabled):
         self.enabled = enabled
         if not enabled:
             self.stop_active_macros(join_timeout=0.5)
             self._release_all()
-            for trigger in list(self.trigger_states.keys()):
-                self.trigger_states[trigger] = False
+            self.trigger_state.reset_all()
         return self.enabled
 
     def toggle(self):
